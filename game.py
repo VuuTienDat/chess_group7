@@ -2,7 +2,17 @@ import pygame
 import chess
 from chess_game import ChessGame
 import sys
+import os
 
+if getattr(sys, 'frozen', False):  # Đang chạy từ .exe
+    bundle_dir = sys._MEIPASS
+else:
+    bundle_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Sử dụng bundle_dir để tham chiếu đến các file bên trong .exe
+music_path = os.path.join(bundle_dir, "Music")
+image_path = os.path.join(bundle_dir, "Image")
+font_path = os.path.join(bundle_dir, "Font")
 WIDTH, HEIGHT = 640, 720
 SQUARE_SIZE = WIDTH // 8
 
@@ -10,33 +20,34 @@ pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Game")
 pygame.mixer.init()
-pygame.mixer.music.load("Music/chessmusic.mp3")  # đường dẫn tới file nhạc
+
+# Đảm bảo bạn tham chiếu đúng các tài nguyên từ sys._MEIPASS
+pygame.mixer.music.load(os.path.join(music_path, "chessmusic.mp3"))  # đường dẫn tới file nhạc
 pygame.mixer.music.play(-1)  # lặp vô hạn
 music_on = True  # Biến để kiểm soát trạng thái nhạc
-move_sound = pygame.mixer.Sound("Music/Move.mp3")
-capture_sound = pygame.mixer.Sound("Music/Capture.mp3")
-check_sound = pygame.mixer.Sound("Music/Check.mp3")
-checkmate_sound = pygame.mixer.Sound("Music/Checkmate.mp3")
-# move_sound.set_volume(0.5)  # Giảm âm lượng xuống 50%
-# pygame.mixer.music.set_volume(0.5)  # Giảm âm lượng nhạc xuống 50%
+move_sound = pygame.mixer.Sound(os.path.join(music_path, "Move.mp3"))
+capture_sound = pygame.mixer.Sound(os.path.join(music_path, "Capture.mp3"))
+check_sound = pygame.mixer.Sound(os.path.join(music_path, "Check.mp3"))
+checkmate_sound = pygame.mixer.Sound(os.path.join(music_path, "Checkmate.mp3"))
+
 board_colors = [(240, 217, 181), (181, 136, 99)]
 
-# Load ảnh quân cờ
+# Load ảnh quân cờ từ sys._MEIPASS
 images = {}
 pieces = ["P", "N", "B", "R", "Q", "K"]
 for color in ["w", "b"]:
     for p in pieces:
         name = color + p
         images[name] = pygame.transform.scale(
-            pygame.image.load(f"Image/{name}.png"), (SQUARE_SIZE, SQUARE_SIZE)
+            pygame.image.load(os.path.join(image_path, f"{name}.png")), (SQUARE_SIZE, SQUARE_SIZE)
         )
 
-FONT = pygame.font.Font("Font/turok.ttf",40)
+FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 40)  # Cập nhật đường dẫn font
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 MENU_COLOR = (100, 100, 100)  # Default button color
 HOVER_COLOR = (255, 0, 0)     # Hover color for buttons
-menu_background = pygame.image.load("Image/landscape4.png")
+menu_background = pygame.image.load(os.path.join(image_path, "landscape4.png"))
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
 
 def draw_text(text, x, y, center=True, color=BLACK):
