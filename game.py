@@ -98,6 +98,107 @@ def draw_button(text, x, y, w, h, color, hover_color, mouse_pos):
     draw_text(text, x + w // 2, y + h // 2, center=True, color=WHITE)
     return rect
 
+def evaluate_board(board):
+    piece_values = {
+        'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0
+    }
+    score = 0
+    for square in chess.SQUARES:
+        piece = board.piece_at(square)
+        if piece:
+            value = piece_values.get(piece.symbol().upper(), 0)
+            if piece.color == chess.WHITE:
+                score += value
+            else:
+                score -= value
+    return score
+def minimax(board, depth, maximizing_player):
+    if depth == 0 or board.is_game_over():
+        return evaluate_board(board)
+
+    legal_moves = list(board.legal_moves)
+    if maximizing_player:
+        max_eval = float('-inf')
+        for move in legal_moves:
+            board.push(move)
+            eval = minimax(board, depth - 1, False)  # Tới lượt đối thủ
+            max_eval = max(max_eval, eval)
+            board.pop()
+        return max_eval
+    else:
+        min_eval = float('inf')
+        for move in legal_moves:
+            board.push(move)
+            eval = minimax(board, depth - 1, True)  # Tới lượt mình
+            min_eval = min(min_eval, eval)
+            board.pop()
+        return min_eval
+def iterative_deepening(board, max_depth):
+    best_move = None
+    for depth in range(1, max_depth + 1):
+        best_eval = float('-inf')
+        legal_moves = list(board.legal_moves)
+        for move in legal_moves:
+            board.push(move)
+            move_eval = minimax(board, depth - 1, False)
+            if move_eval > best_eval:
+                best_eval = move_eval
+                best_move = move
+            board.pop()
+    return best_move
+def play_vs_ai():
+    game = ChessGame()
+    selected = None
+    running = True
+    while running:
+        draw_board()
+        draw_pieces(game)
+        mouse_pos = pygame.mouse.get_pos()
+        btn_undo = draw_button("Undo", 10, 660, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+
+        if selected:
+            draw_move_hints(game, selected)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if btn_undo.collidepoint(event.pos):
+                    game.undo()
+                elif btn_back.collidepoint(event.pos):
+                    running = False
+
+                square = get_square_from_mouse(event.pos)
+                piece = game.get_piece(square)
+
+                if selected:
+                    target_piece = game.get_piece(square)
+                    move_successful = game.move(selected, square)
+
+                    if move_successful:
+                        if game.board.is_checkmate():  # Nếu chiếu hết
+                            checkmate_sound.play()
+                        if target_piece:  # Nếu có quân → ăn quân
+                            capture_sound.play()
+                        else: move_sound.play()  # Nếu không có quân → đi quân
+                        
+                        if game.board.is_check():  # Sau khi đi xong, kiểm tra chiếu
+                            check_sound.play()
+                        selected = None
+                    else:
+                        selected = square if piece and piece.color == game.board.turn else None
+                else:
+                    selected = square if piece and piece.color == game.board.turn else None
+
+        # AI đưa ra nước đi khi đến lượt của nó
+        if game.board.turn == chess.BLACK:  # AI chơi màu đen
+            best_move = iterative_deepening(game.board, 3)  # Giới hạn độ sâu tối đa là 3
+            game.board.push(best_move)
+
+        pygame.display.flip()
 
 def play_1vs1():
     game = ChessGame()
@@ -137,12 +238,13 @@ def play_1vs1():
                     if move_successful:
                         if game.board.is_checkmate():  # Nếu chiếu hết
                             checkmate_sound.play()
-                        elif target_piece:  # Nếu có quân → ăn quân
+                        if target_piece:  # Nếu có quân → ăn quân
                             capture_sound.play()
-                        elif game.board.is_check():  # Sau khi đi xong, kiểm tra chiếu
+                        else: move_sound.play()  # Nếu không có quân → đi quân
+                        
+                        if game.board.is_check():  # Sau khi đi xong, kiểm tra chiếu
                             check_sound.play()
-                        else:
-                            move_sound.play()
+                        
                         selected = None
                     else:
                         selected = square if piece and piece.color == game.board.turn else None
@@ -188,7 +290,7 @@ while running:
             if btn_1v1.collidepoint(event.pos):
                 play_1vs1()
             elif btn_vs_ai.collidepoint(event.pos):
-                print("Start vs AI (chưa làm)")
+                play_vs_ai()
             elif btn_music.collidepoint(event.pos):
                 print("Toggle Music (chưa làm)")
                 music_on = not music_on
