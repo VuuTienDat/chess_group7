@@ -349,7 +349,7 @@ def main_menu():
                 elif btn_vs_ai.collidepoint(event.pos):
                     play_vs_ai()
                 elif btn_music.collidepoint(event.pos):
-                    toggle_music(0.5)
+                    toggle_music()
                 elif btn_quit.collidepoint(event.pos):
                     pygame.quit()
                     sys.exit()
