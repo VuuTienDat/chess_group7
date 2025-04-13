@@ -349,16 +349,73 @@ def main_menu():
                 elif btn_vs_ai.collidepoint(event.pos):
                     play_vs_ai()
                 elif btn_music.collidepoint(event.pos):
-                    toggle_music()
+                    toggle_music(0.5)
                 elif btn_quit.collidepoint(event.pos):
                     pygame.quit()
                     sys.exit()
+
 def toggle_music():
-    global music_on
-    music_on = not music_on
-    if music_on:
-        pygame.mixer.music.unpause()
-    else:
-        pygame.mixer.music.pause()
+    running = True
+    # Tạo thanh trượt ở giữa màn hình
+    slider_rect = pygame.Rect(WIDTH//2 - 150, HEIGHT//2 - 20, 300, 40)
+    handle_radius = 10
+    slider_min = slider_rect.x
+    clock = pygame.time.Clock()
+    volume = pygame.mixer.music.get_volume()  # Lấy âm lượng hiện tại
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                # Nhấn Esc để quay lại menu
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    mouse_x, _ = event.pos
+                    # Kiểm tra xem nhấn vào nút Back hay không
+                    back_rect = pygame.Rect(WIDTH//2 - 50, slider_rect.y + slider_rect.height + 40, 100, 40)
+                    if back_rect.collidepoint(event.pos):
+                        running = False
+                    elif slider_rect.collidepoint(event.pos):
+                        # Tính âm lượng theo vị trí click
+                        volume = (mouse_x - slider_min) / slider_rect.width
+                        volume = max(0.0, min(volume, 1.0))
+                        pygame.mixer.music.set_volume(volume)
+            elif event.type == pygame.MOUSEMOTION:
+                if event.buttons[0]:  # Nếu chuột đang giữ chuột trái
+                    mouse_x, _ = event.pos
+                    if slider_rect.collidepoint(event.pos):
+                        volume = (mouse_x - slider_min) / slider_rect.width
+                        volume = max(0.0, min(volume, 1.0))
+                        pygame.mixer.music.set_volume(volume)
+
+        # Vẽ giao diện volume control
+        screen.blit(menu_background, (0, 0))
+        title = FONT.render("Adjust Volume", True, BLACK)
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, 100))
+
+        # Vẽ thanh trượt nền
+        pygame.draw.rect(screen, (200, 200, 200), slider_rect)
+        # Vẽ phần đã điền dựa trên âm lượng hiện tại
+        fill_width = int(slider_rect.width * volume)
+        fill_rect = pygame.Rect(slider_min, slider_rect.y, fill_width, slider_rect.height)
+        pygame.draw.rect(screen, (100, 100, 100), fill_rect)
+        # Vẽ tay cầm
+        handle_x = slider_min + fill_width
+        handle_y = slider_rect.y + slider_rect.height // 2
+        pygame.draw.circle(screen, (255, 0, 0), (handle_x, handle_y), handle_radius)
+        # Vẽ nút Back
+        back_rect = pygame.Rect(WIDTH//2 - 50, slider_rect.y + slider_rect.height + 40, 100, 40)
+        pygame.draw.rect(screen, HOVER_COLOR, back_rect)
+        back_text = FONT.render("Back", True, WHITE)
+        back_text_rect = back_text.get_rect(center=back_rect.center)
+        screen.blit(back_text, back_text_rect)
+
+        pygame.display.flip()
+        clock.tick(60)
+
 if __name__ == "__main__":
     main_menu()
