@@ -146,6 +146,30 @@ def iterative_deepening(board, max_depth):
                 best_move = move
             board.pop()
     return best_move
+def notification(message):
+    text = FONT.render(message, True, (255, 0, 0))
+    rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+
+    while True:
+        screen.blit(menu_background, (0, 0))
+        screen.blit(text, rect)
+        mouse_pos = pygame.mouse.get_pos()
+        btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                return  # người chơi nhấn phím để thoát khỏi hàm
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if btn_back.collidepoint(event.pos):
+                    main_menu()  # Quay lại menu chính
+
+        
+        
+        pygame.display.flip()
+
+
 def play_vs_ai():
     game = ChessGame()
     selected = None
@@ -196,7 +220,21 @@ def play_vs_ai():
         # AI đưa ra nước đi khi đến lượt của nó
         if game.board.turn == chess.BLACK:  # AI chơi màu đen
             best_move = iterative_deepening(game.board, 3)  # Giới hạn độ sâu tối đa là 3
-            game.board.push(best_move)
+            if best_move:
+                game.board.push(best_move)
+                
+            else:
+                if game.board.is_checkmate():
+                    notification("Checkmate! You lost.")
+                elif game.board.is_stalemate():
+                    notification("Stalemate!")
+                elif game.board.is_insufficient_material():
+                    notification("Draw: Insufficient material.")
+                else:
+                    notification("No legal move. Game Over.")
+
+                # reset board nếu muốn chơi lại
+                game.board.reset()
 
         pygame.display.flip()
 
@@ -238,6 +276,11 @@ def play_1vs1():
                     if move_successful:
                         if game.board.is_checkmate():  # Nếu chiếu hết
                             checkmate_sound.play()
+                            notification("Checkmate!")
+                        elif game.board.is_stalemate():  # Nếu hòa thế cờ
+                            notification("Stalemate!")
+                        elif game.board.is_insufficient_material():  # Nếu hòa do thiếu quân
+                            notification("Draw: Insufficient material.")
                         if target_piece:  # Nếu có quân → ăn quân
                             capture_sound.play()
                         else: move_sound.play()  # Nếu không có quân → đi quân
@@ -255,52 +298,50 @@ def play_1vs1():
 
 
 # ------------------- MENU --------------------
-running = True
-while running:
-    screen.blit(menu_background, (0, 0))
-    title = FONT.render("Chess Game", True, BLACK)
-    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 80))
+def main_menu():
+    running = True
+    while running:
+        screen.blit(menu_background, (0, 0))
+        title = FONT.render("Chess Game", True, BLACK)
+        screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 80))
 
-    # Draw the buttons and check if the mouse is hovering over them
-    btn_1v1 = draw_text("Play 1 vs 1", WIDTH // 2, 200)
-    btn_vs_ai = draw_text("Play vs AI", WIDTH // 2, 270)
-    btn_music = draw_text("Music", WIDTH // 2, 340)
-    btn_quit = draw_text("Exit", WIDTH // 2, 410)
+        btn_1v1 = draw_text("Play 1 vs 1", WIDTH // 2, 200)
+        btn_vs_ai = draw_text("Play vs AI", WIDTH // 2, 270)
+        btn_music = draw_text("Music", WIDTH // 2, 340)
+        btn_quit = draw_text("Exit", WIDTH // 2, 410)
 
-    # Get mouse position
-    mouse_x, mouse_y = pygame.mouse.get_pos()
+        mouse_x, mouse_y = pygame.mouse.get_pos()
 
-    # Check if the mouse is hovering over any button and change color
-    if btn_1v1.collidepoint(mouse_x, mouse_y):
-        draw_text("Play 1 vs 1", WIDTH // 2, 200, color=HOVER_COLOR)
-    if btn_vs_ai.collidepoint(mouse_x, mouse_y):
-        draw_text("Play vs AI", WIDTH // 2, 270, color=HOVER_COLOR)
-    if btn_music.collidepoint(mouse_x, mouse_y):
-        draw_text("Music", WIDTH // 2, 340, color=HOVER_COLOR)
-    if btn_quit.collidepoint(mouse_x, mouse_y):
-        draw_text("Exit", WIDTH // 2, 410, color=HOVER_COLOR)
+        if btn_1v1.collidepoint(mouse_x, mouse_y):
+            draw_text("Play 1 vs 1", WIDTH // 2, 200, color=HOVER_COLOR)
+        if btn_vs_ai.collidepoint(mouse_x, mouse_y):
+            draw_text("Play vs AI", WIDTH // 2, 270, color=HOVER_COLOR)
+        if btn_music.collidepoint(mouse_x, mouse_y):
+            draw_text("Music", WIDTH // 2, 340, color=HOVER_COLOR)
+        if btn_quit.collidepoint(mouse_x, mouse_y):
+            draw_text("Exit", WIDTH // 2, 410, color=HOVER_COLOR)
 
-    pygame.display.flip()
+        pygame.display.flip()
 
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if btn_1v1.collidepoint(event.pos):
-                play_1vs1()
-            elif btn_vs_ai.collidepoint(event.pos):
-                play_vs_ai()
-            elif btn_music.collidepoint(event.pos):
-                print("Toggle Music (chưa làm)")
-                music_on = not music_on
-                if music_on:
-                    pygame.mixer.music.unpause()
-                else:
-                    pygame.mixer.music.pause()
-            elif btn_quit.collidepoint(event.pos):
-                pygame.quit()
-                sys.exit()
-
-pygame.quit()
-sys.exit()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if btn_1v1.collidepoint(event.pos):
+                    play_1vs1()
+                elif btn_vs_ai.collidepoint(event.pos):
+                    play_vs_ai()
+                elif btn_music.collidepoint(event.pos):
+                    toggle_music()
+                elif btn_quit.collidepoint(event.pos):
+                    pygame.quit()
+                    sys.exit()
+def toggle_music():
+    global music_on
+    music_on = not music_on
+    if music_on:
+        pygame.mixer.music.unpause()
+    else:
+        pygame.mixer.music.pause()
+if __name__ == "__main__":
+    main_menu()
