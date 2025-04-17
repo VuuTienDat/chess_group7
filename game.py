@@ -351,11 +351,13 @@ def draw_pieces(game):
             row = 7 - chess.square_rank(square)
             name = ('w' if piece.color == chess.WHITE else 'b') + piece.symbol().upper()
             screen.blit(images[name], (col * SQUARE_SIZE, row * SQUARE_SIZE))
+        
 
 def get_square_from_mouse(pos):
     x, y = pos
     col = x // SQUARE_SIZE
     row = 7 - (y // SQUARE_SIZE)
+    
     return chess.square(col, row)
 def draw_move_hints(game, selected_square):
     for move in game.board.legal_moves:
@@ -514,118 +516,29 @@ def iterative_deepening(board, max_depth):
                 best_move = move
             board.pop()
     return best_move
-
 def notification(message):
     text = FONT.render(message, True, (255, 0, 0))
     rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
 
     while True:
         screen.blit(menu_background, (0, 0))
-        screen.blit(text, rect)
+        draw_text(message, WIDTH // 2, HEIGHT // 2, color=(255, 0, 0))
         mouse_pos = pygame.mouse.get_pos()
         btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                return  # người chơi nhấn phím để thoát khỏi hàm
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if btn_back.collidepoint(event.pos):
-                    main_menu()  # Quay lại menu chính
-
-        
-        
+                    game.board.reset()
+                    game.move_history.clear()
+                    main_menu()
         pygame.display.flip()
 
-evaluator = HeuristicEvaluator()
-
-def is_reverse_move(previous_move, current_move):
-    """
-    Kiểm tra nếu current_move là nước đi đảo ngược của previous_move.
-    """
-    if previous_move is None:
-        return False
-    return (current_move.from_square == previous_move.to_square and
-            current_move.to_square == previous_move.from_square)
-
-# Giả sử bạn lưu trạng thái nước đi của lượt trước vào biến last_ai_move
-last_ai_move = None  # Global hoặc truyền qua tham số
-
-def sort_moves(board, moves, maximizing_player):
-    move_scores = []
-    for move in moves:
-        board.push(move)
-        score = evaluator.evaluate_board(board)
-        board.pop()
-        move_scores.append((score, move))
-    # Nếu maximizing, sắp xếp giảm dần; nếu minimizing, sắp xếp tăng dần
-    sorted_moves = sorted(move_scores, key=lambda x: x[0], reverse=maximizing_player)
-    return [move for score, move in sorted_moves]
-
-def alpha_beta(board, depth, alpha, beta, maximizing_player, last_move=None):
-    if depth == 0 or board.is_game_over():
-        return evaluator.evaluate_board(board)
-    
-    legal_moves = list(board.legal_moves)
-    sorted_moves = sort_moves(board, legal_moves, maximizing_player)
-    
-    if maximizing_player:
-        max_eval = float('-inf')
-        for move in sorted_moves:
-            penalty = 0
-            if is_reverse_move(last_move, move):
-                penalty = 50
-            board.push(move)
-            eval = alpha_beta(board, depth - 1, alpha, beta, False, move)
-            board.pop()
-            eval -= penalty
-            max_eval = max(max_eval, eval)
-            alpha = max(alpha, eval)
-            if beta <= alpha:
-                break
-        return max_eval
-    else:
-        min_eval = float('inf')
-        for move in sorted_moves:
-            penalty = 0
-            if is_reverse_move(last_move, move):
-                penalty = 50
-            board.push(move)
-            eval = alpha_beta(board, depth - 1, alpha, beta, True, move)
-            board.pop()
-            eval += penalty
-            min_eval = min(min_eval, eval)
-            beta = min(beta, eval)
-            if beta <= alpha:
-                break
-        return min_eval
-
-def alpha_beta_search(board, depth):
-    global last_ai_move
-    best_move = None
-    best_eval = float('-inf')
-    alpha = float('-inf')
-    beta = float('inf')
-    legal_moves = list(board.legal_moves)
-    sorted_moves = sort_moves(board, legal_moves, True)
-    for move in sorted_moves:
-        penalty = 0
-        if is_reverse_move(last_ai_move, move):
-            penalty = 50
-        board.push(move)
-        current_eval = alpha_beta(board, depth - 1, alpha, beta, False, move)
-        board.pop()
-        current_eval -= penalty
-        if current_eval > best_eval:
-            best_eval = current_eval
-            best_move = move
-        alpha = max(alpha, current_eval)
-    return best_move
 
 def play_vs_ai():
     game = ChessGame()
-    selected = None
     running = True
     while running:
         draw_board()
@@ -633,10 +546,8 @@ def play_vs_ai():
         mouse_pos = pygame.mouse.get_pos()
         btn_undo = draw_button("Undo", 10, 660, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
         btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
-
-        if selected:
-            draw_move_hints(game, selected)
-
+        draw_move_hints(game, game.selected_square)
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -652,24 +563,22 @@ def play_vs_ai():
 
                 if selected:
                     target_piece = game.get_piece(square)
-                    previous_fen = game.board.fen()
                     move_successful = game.move(selected, square)
+
                     if move_successful:
-                        if game.board.is_checkmate():
+                        if game.board.is_checkmate():  # Nếu chiếu hết
                             checkmate_sound.play()
-                        if target_piece:
+                        if target_piece:  # Nếu có quân → ăn quân
                             capture_sound.play()
-                        else:
-                            move_sound.play()
-                        if game.board.is_check():
+                        else: move_sound.play()  # Nếu không có quân → đi quân
+                        
+                        if game.board.is_check():  # Sau khi đi xong, kiểm tra chiếu
                             check_sound.play()
-                        move_made = chess.Move(selected, square)
-                        save_human_move(previous_fen, move_made)
                         selected = None
                     else:
-                        selected = square if piece and piece.color == game.board.turn else None
-                else:
-                    selected = square if piece and piece.color == game.board.turn else None
+                        game.selected_square = square if piece and piece.color == game.board.turn else None
+        
+        pygame.display.flip()
 
         # AI turn dùng alpha-beta search nếu đến lượt của ai (màu đen)
         if game.board.turn == chess.BLACK:
@@ -693,59 +602,65 @@ def play_vs_ai():
 
 def play_1vs1():
     game = ChessGame()
-    selected = None
     running = True
     while running:
-        
         draw_board()
         draw_pieces(game)
         mouse_pos = pygame.mouse.get_pos()
         btn_undo = draw_button("Undo", 10, 660, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
         btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
-
-        if selected:
-            draw_move_hints(game, selected)  # <-- Thêm dòng này ở đây
+        draw_move_hints(game, game.selected_square)
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                sys.exit() 
-           
-
+                sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if btn_undo.collidepoint(event.pos):
-                    game.undo()  
+                    game.undo()
                 elif btn_back.collidepoint(event.pos):
                     running = False
-
-                square = get_square_from_mouse(event.pos)
-                piece = game.get_piece(square)
-
-                if selected:                   
-                    # Kiểm tra nếu có quân ở ô đích trước khi đi
-                    target_piece = game.get_piece(square)
-                    move_successful = game.move(selected, square)
-
-                    if move_successful:
-                        if game.board.is_checkmate():  # Nếu chiếu hết
-                            checkmate_sound.play()
-                            notification("Checkmate!")
-                        elif game.board.is_stalemate():  # Nếu hòa thế cờ
-                            notification("Stalemate!")
-                        elif game.board.is_insufficient_material():  # Nếu hòa do thiếu quân
-                            notification("Draw: Insufficient material.")
-                        if target_piece:  # Nếu có quân → ăn quân
-                            capture_sound.play()
-                        else: move_sound.play()  # Nếu không có quân → đi quân
-                        
-                        if game.board.is_check():  # Sau khi đi xong, kiểm tra chiếu
-                            check_sound.play()
-                        
-                        selected = None
-                    else:
-                        selected = square if piece and piece.color == game.board.turn else None
                 else:
-                    selected = square if piece and piece.color == game.board.turn else None
+                    x, y = event.pos
+                    col = x // SQUARE_SIZE
+                    row = 7 - (y // SQUARE_SIZE)
+                    if not (0 <= col < 8 and 0 <= row < 8):
+                        continue
+                    square = chess.square(col, row)
+                    piece = game.get_piece(square)
+                    
+                    if game.selected_square is not None:
+                        # Kiểm tra xem ô đích có quân để phát âm thanh phù hợp
+                        target_piece = game.get_piece(square)
+                        if game.move(game.selected_square, square):
+                          
+                            # Kiểm tra trạng thái trò chơi
+                            if game.board.is_checkmate():
+                                checkmate_sound.play()
+                                winner = "White" if game.board.turn == chess.BLACK else "Black"
+                                notification(game, f"Checkmate! {winner} wins!")
+                            elif game.board.is_stalemate():
+                                notification(game, "Stalemate!")
+                            elif game.board.is_insufficient_material():
+                                notification(game, "Draw: Insufficient material!")
+                            elif game.board.is_seventyfive_moves():
+                                notification(game, "Draw: 75-move rule!")
+                            elif game.board.is_fivefold_repetition():
+                                notification(game, "Draw: Fivefold repetition!")
+                                  # Phát âm thanh: ăn quân hoặc di chuyển
+                            if target_piece:  # Ăn quân hoặc bắt tốt qua đường
+                                capture_sound.play()
+                            else:
+                                move_sound.play()
+                            # Phát âm thanh chiếu tướng
+                            if game.board.is_check():
+                                check_sound.play()
+                            game.selected_square = None
+                        else:
+                            game.selected_square = square if piece and piece.color == game.board.turn else None
+                    else:
+                        game.selected_square = square if piece and piece.color == game.board.turn else None
+        
         pygame.display.flip()
 
 
