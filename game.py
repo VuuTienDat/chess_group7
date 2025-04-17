@@ -548,6 +548,8 @@ def play_vs_ai():
         btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         draw_move_hints(game, game.selected_square)
         
+        selected = None 
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
