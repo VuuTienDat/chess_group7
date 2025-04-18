@@ -113,170 +113,327 @@ def notification(game, message):
                     game.move_history.clear()
                     main_menu()
         pygame.display.flip()
-
 def play_vs_ai():
     game = ChessGame()
     engine = Engine()
     running = True
+    suggested_move = None
+    promotion_dialog = False
+    promotion_from = None
+    promotion_to = None
+    
     while running:
         draw_board()
         draw_pieces(game)
         mouse_pos = pygame.mouse.get_pos()
+        
+        # Vẽ các nút
         btn_undo = draw_button("Undo", 10, 660, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        btn_help = draw_button("Help", 120, 660, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)
         btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+        
+        # Vẽ gợi ý nước đi cho ô được chọn
         draw_move_hints(game, game.selected_square)
         
+        # Tô sáng nước đi gợi ý nếu có
+        if suggested_move:
+           # Tô sáng ô nguồn (from_square)
+            from_square = suggested_move.from_square
+            from_col = chess.square_file(from_square)
+            from_row = 7 - chess.square_rank(from_square)
+            from_center = (from_col * SQUARE_SIZE + SQUARE_SIZE // 2, from_row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            pygame.draw.circle(screen, (0, 0, 255), from_center, 20, 3)  # Vòng tròn xanh lam cho ô nguồn
+            
+            # Tô sáng ô đích (to_square)
+            to_square = suggested_move.to_square
+            to_col = chess.square_file(to_square)
+            to_row = 7 - chess.square_rank(to_square)
+            to_center = (to_col * SQUARE_SIZE + SQUARE_SIZE // 2, to_row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            pygame.draw.circle(screen, (255, 255, 0), to_center, 20, 3)  # Vòng tròn vàng cho ô đích
+       
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if btn_undo.collidepoint(event.pos):
-                    game.undo()
-                elif btn_back.collidepoint(event.pos):
-                    running = False
+                if promotion_dialog:
+                    print("Phong nào")
+                    # Xử lý chọn quân phong cấp
+                    if btn_queen.collidepoint(event.pos):
+                        game.move(promotion_from, promotion_to, promotion=chess.QUEEN)
+                        promotion_dialog = False
+                        handle_move_outcome(game)
+                    elif btn_rook.collidepoint(event.pos):
+                        game.move(promotion_from, promotion_to, promotion=chess.ROOK)
+                        promotion_dialog = False
+                        handle_move_outcome(game)
+                    elif btn_bishop.collidepoint(event.pos):
+                        game.move(promotion_from, promotion_to, promotion=chess.BISHOP)
+                        promotion_dialog = False
+                        handle_move_outcome(game)
+                    elif btn_knight.collidepoint(event.pos):
+                        game.move(promotion_from, promotion_to, promotion=chess.KNIGHT)
+                        promotion_dialog = False
+                        handle_move_outcome(game)
                 else:
-                    x, y = event.pos
-                    col = x // SQUARE_SIZE
-                    row = 7 - (y // SQUARE_SIZE)
-                    if not (0 <= col < 8 and 0 <= row < 8):
-                        continue
-                    square = chess.square(col, row)
-                    piece = game.get_piece(square)
-                    
-                    if game.selected_square is not None:
-                        target_piece = game.get_piece(square)
-                        if game.move(game.selected_square, square):
-                            if game.board.is_checkmate():
-                                checkmate_sound.play()
-                                winner = "White" if game.board.turn == chess.BLACK else "Black"
-                                notification(game, f"Checkmate! {winner} wins!")
-                            elif game.board.is_stalemate():
-                                notification(game, "Stalemate!")
-                            elif game.board.is_insufficient_material():
-                                notification(game, "Draw: Insufficient material!")
-                            elif game.board.is_seventyfive_moves():
-                                notification(game, "Draw: 75-move rule!")
-                            elif game.board.is_fivefold_repetition():
-                                notification(game, "Draw: Fivefold repetition!")
-                            if target_piece:
-                                capture_sound.play()
-                            else:
-                                move_sound.play()
-                            if game.board.is_check():
-                                check_sound.play()
-                            game.selected_square = None
-                        else:
-                            game.selected_square = square if piece and piece.color == game.board.turn else None
+                    if btn_undo.collidepoint(event.pos):
+                        game.undo()
+                        suggested_move = None
+                    elif btn_help.collidepoint(event.pos):
+                        if game.board.turn == chess.WHITE:
+                            engine.set_position(game.board.fen())
+                            uci_move = engine.get_best_move()
+                            if uci_move:
+                                from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
+                                to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
+                                promotion = None
+                                if len(uci_move) == 5:
+                                    promotion_piece = uci_move[4].upper()
+                                    promotion = {
+                                        'Q': chess.QUEEN,
+                                        'R': chess.ROOK,
+                                        'B': chess.BISHOP,
+                                        'N': chess.KNIGHT
+                                    }.get(promotion_piece)
+                                suggested_move = chess.Move(from_square, to_square, promotion=promotion)
+                    elif btn_back.collidepoint(event.pos):
+                        running = False
                     else:
-                        game.selected_square = square if piece and piece.color == game.board.turn else None
+                        x, y = event.pos
+                        col = x // SQUARE_SIZE
+                        row = 7 - (y // SQUARE_SIZE)
+                        if not (0 <= col < 8 and 0 <= row < 8):
+                            continue
+                        square = chess.square(col, row)
+                        piece = game.get_piece(square)
+                        
+                        
+                        if game.selected_square is not None:
+                            piece = game.get_piece(game.selected_square)
+                            target_piece = game.get_piece(square)
+                            move_result = game.move(game.selected_square, square)
+                            if move_result["valid"]:
+                                if move_result["promotion_required"]:
+                                    # Nếu nước đi là phong cấp, hiển thị hộp thoại phong cấp
+                                    promotion_dialog = True
+                                    promotion_from = game.selected_square
+                                    promotion_to = square
+                                else:
+                                    suggested_move = None
+                                    handle_move_outcome(game, target_piece)
+                            else:
+                                print(f"Nước đi không hợp lệ: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                                game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
+                        else:
+                            piece = game.get_piece(square)
+                            game.selected_square = square if piece and piece.color == game.board.turn else None
+                            print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
+        
+        if promotion_dialog:
+            #Vẽ giao diện chọn phong cấp
+            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 150))
+            screen.blit(overlay, (0, 0))
+            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, FONT, (255, 255, 255))
+            btn_queen = draw_button("Queen", WIDTH // 2 - 50, HEIGHT // 2 - 100, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+            btn_rook = draw_button("Rook", WIDTH // 2 - 50, HEIGHT // 2 - 40, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+            btn_bishop = draw_button("Bishop", WIDTH // 2 - 50, HEIGHT // 2 + 20, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+            btn_knight = draw_button("Knight", WIDTH // 2 - 50, HEIGHT // 2 + 80, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        
         
         pygame.display.flip()
 
-        # AI đưa ra nước đi khi đến lượt của nó
-        if game.board.turn == chess.BLACK:
+        # AI thực hiện nước đi khi đến lượt
+        if game.board.turn == chess.BLACK and not promotion_dialog:
             engine.set_position(game.board.fen())
             uci_move = engine.get_best_move()
             if uci_move:
-                from_square = chess.square(
-                    ord(uci_move[0]) - ord('a'),
-                    int(uci_move[1]) - 1
-                )
-                to_square = chess.square(
-                    ord(uci_move[2]) - ord('a'),
-                    int(uci_move[3]) - 1
-                )
-                move = chess.Move(from_square, to_square)
-                # Xử lý phong cấp
-                if len(uci_move) == 5:  # UCI move có phong cấp (e7e8q)
+                from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
+                to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
+                promotion = None
+                if len(uci_move) == 5:
                     promotion_piece = uci_move[4].upper()
-                    if promotion_piece == 'Q':
-                        move = chess.Move(from_square, to_square, promotion=chess.QUEEN)
-                    elif promotion_piece == 'R':
-                        move = chess.Move(from_square, to_square, promotion=chess.ROOK)
-                    elif promotion_piece == 'B':
-                        move = chess.Move(from_square, to_square, promotion=chess.BISHOP)
-                    elif promotion_piece == 'N':
-                        move = chess.Move(from_square, to_square, promotion=chess.KNIGHT)
-                if move in game.board.legal_moves:
+                    promotion = {
+                        'Q': chess.QUEEN,
+                        'R': chess.ROOK,
+                        'B': chess.BISHOP,
+                        'N': chess.KNIGHT
+                    }.get(promotion_piece)
+                move_result = game.move(from_square, to_square, promotion=promotion)
+                if move_result["valid"]:
                     target_piece = game.get_piece(to_square)
-                    game.board.push(move)
-                    if game.board.is_check():
-                        check_sound.play()
-                    if target_piece:
-                        capture_sound.play()
-                    else:
-                        move_sound.play()
+                    handle_move_outcome(game, target_piece)
                 else:
-                    print(f"Invalid move from engine: {uci_move}")
+                    print(f"Nước đi không hợp lệ từ engine: {uci_move}")
             else:
                 if game.board.is_checkmate():
-                    notification(game, "Checkmate! You lost.")
+                    notification(game, "Chiếu hết! Bạn thua.")
                 elif game.board.is_stalemate():
-                    notification(game, "Stalemate!")
+                    notification(game, "Hòa cờ!")
                 elif game.board.is_insufficient_material():
-                    notification(game, "Draw: Insufficient material.")
+                    notification(game, "Hòa: Không đủ quân!")
                 else:
-                    notification(game, "No legal move. Game Over.")
+                    notification(game, "Không có nước đi hợp lệ. Kết thúc ván.")
                 game.board.reset()
 
         pygame.display.flip()
 
+def handle_move_outcome(game, target_piece=None):
+    if game.board.is_checkmate():
+        checkmate_sound.play()
+        winner = "Trắng" if game.board.turn == chess.BLACK else "Đen"
+        notification(game, f"Chiếu hết! {winner} thắng!")
+    elif game.board.is_stalemate():
+        notification(game, "Hòa cờ!")
+    elif game.board.is_insufficient_material():
+        notification(game, "Hòa: Không đủ quân!")
+    elif game.board.is_seventyfive_moves():
+        notification(game, "Hòa: Quy tắc 75 nước!")
+    elif game.board.is_fivefold_repetition():
+        notification(game, "Hòa: Lặp lại 5 lần!")
+    if target_piece:
+        capture_sound.play()
+    else:
+        move_sound.play()
+    if game.board.is_check():
+        check_sound.play()
+    game.selected_square = None
+
 def play_1vs1():
     game = ChessGame()
+    engine = Engine()  # Thêm engine để gợi ý nước đi
     running = True
+    suggested_move = None
+    promotion_dialog = False
+    promotion_from = None
+    promotion_to = None
+    
     while running:
         draw_board()
         draw_pieces(game)
         mouse_pos = pygame.mouse.get_pos()
+        
+        # Vẽ các nút
         btn_undo = draw_button("Undo", 10, 660, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        btn_help = draw_button("Help", 120, 660, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)  # Nút Help mới
         btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+        
+        # Vẽ gợi ý nước đi cho ô được chọn
         draw_move_hints(game, game.selected_square)
+        
+        # Tô sáng nước đi gợi ý nếu có
+        if suggested_move:
+            # Tô sáng ô nguồn (from_square)
+            from_square = suggested_move.from_square
+            from_col = chess.square_file(from_square)
+            from_row = 7 - chess.square_rank(from_square)
+            from_center = (from_col * SQUARE_SIZE + SQUARE_SIZE // 2, from_row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            pygame.draw.circle(screen, (0, 0, 255), from_center, 20, 3)  # Vòng tròn xanh lam cho ô nguồn
+            
+            # Tô sáng ô đích (to_square)
+            to_square = suggested_move.to_square
+            to_col = chess.square_file(to_square)
+            to_row = 7 - chess.square_rank(to_square)
+            to_center = (to_col * SQUARE_SIZE + SQUARE_SIZE // 2, to_row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            pygame.draw.circle(screen, (255, 255, 0), to_center, 20, 3)  # Vòng tròn vàng cho ô đích
+        
+      
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if btn_undo.collidepoint(event.pos):
-                    game.undo()
-                elif btn_back.collidepoint(event.pos):
-                    running = False
-                else:
-                    x, y = event.pos
-                    col = x // SQUARE_SIZE
-                    row = 7 - (y // SQUARE_SIZE)
-                    if not (0 <= col < 8 and 0 <= row < 8):
-                        continue
-                    square = chess.square(col, row)
-                    piece = game.get_piece(square)
+                if promotion_dialog:
+                    # Xử lý chọn quân phong cấp
                     
-                    if game.selected_square is not None:
-                        target_piece = game.get_piece(square)
-                        if game.move(game.selected_square, square):
-                            if game.board.is_checkmate():
-                                checkmate_sound.play()
-                                winner = "White" if game.board.turn == chess.BLACK else "Black"
-                                notification(game, f"Checkmate! {winner} wins!")
-                            elif game.board.is_stalemate():
-                                notification(game, "Stalemate!")
-                            elif game.board.is_insufficient_material():
-                                notification(game, "Draw: Insufficient material!")
-                            elif game.board.is_seventyfive_moves():
-                                notification(game, "Draw: 75-move rule!")
-                            elif game.board.is_fivefold_repetition():
-                                notification(game, "Draw: Fivefold repetition!")
-                            if target_piece:
-                                capture_sound.play()
-                            else:
-                                move_sound.play()
-                            if game.board.is_check():
-                                check_sound.play()
-                            game.selected_square = None
-                        else:
-                            game.selected_square = square if piece and piece.color == game.board.turn else None
+                    if btn_queen.collidepoint(event.pos):
+                        game.move(promotion_from, promotion_to, promotion=chess.QUEEN)
+                        promotion_dialog = False
+                        suggested_move = None  # Xóa gợi ý sau khi đi
+                        handle_move_outcome(game)
+                    elif btn_rook.collidepoint(event.pos):
+                        game.move(promotion_from, promotion_to, promotion=chess.ROOK)
+                        promotion_dialog = False
+                        suggested_move = None
+                        handle_move_outcome(game)
+                    elif btn_bishop.collidepoint(event.pos):
+                        game.move(promotion_from, promotion_to, promotion=chess.BISHOP)
+                        promotion_dialog = False
+                        suggested_move = None
+                        handle_move_outcome(game)
+                    elif btn_knight.collidepoint(event.pos):
+                        game.move(promotion_from, promotion_to, promotion=chess.KNIGHT)
+                        promotion_dialog = False
+                        suggested_move = None
+                        handle_move_outcome(game)
+                    screen.blit(menu_background, (0, 0))
+                else:
+                    if btn_undo.collidepoint(event.pos):
+                        game.undo()
+                        suggested_move = None
+                    elif btn_help.collidepoint(event.pos):
+                        # Gợi ý nước đi cho lượt hiện tại (Trắng hoặc Đen)
+                        engine.set_position(game.board.fen())
+                        uci_move = engine.get_best_move()
+                        if uci_move:
+                            from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
+                            to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
+                            promotion = None
+                            if len(uci_move) == 5:
+                                promotion_piece = uci_move[4].upper()
+                                promotion = {
+                                    'Q': chess.QUEEN,
+                                    'R': chess.ROOK,
+                                    'B': chess.BISHOP,
+                                    'N': chess.KNIGHT
+                                }.get(promotion_piece)
+                            suggested_move = chess.Move(from_square, to_square, promotion=promotion)
+                    elif btn_back.collidepoint(event.pos):
+                        running = False
                     else:
-                        game.selected_square = square if piece and piece.color == game.board.turn else None
+                        x, y = event.pos
+                        col = x // SQUARE_SIZE
+                        row = 7 - (y // SQUARE_SIZE)
+                        if not (0 <= col < 8 and 0 <= row < 8):
+                            continue
+                        square = chess.square(col, row)
+                        piece = game.get_piece(square)
+                        
+                        
+                        if game.selected_square is not None:
+                            piece = game.get_piece(game.selected_square)
+                            target_piece = game.get_piece(square)
+                            move_result = game.move(game.selected_square, square)
+                            if move_result["valid"]:
+                                if move_result["promotion_required"]:
+                                    # Nếu nước đi là phong cấp, hiển thị hộp thoại phong cấp
+                                    promotion_dialog = True
+                                    promotion_from = game.selected_square
+                                    promotion_to = square
+                                else:
+                                    suggested_move = None
+                                    handle_move_outcome(game, target_piece)
+                            else:
+                                print(f"Nước đi không hợp lệ: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                                game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
+                        else:
+                            piece = game.get_piece(square)
+                            game.selected_square = square if piece and piece.color == game.board.turn else None
+                            print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
+        
+        if promotion_dialog:
+            #Vẽ giao diện chọn phong cấp
+            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 150))
+            screen.blit(overlay, (0, 0))
+            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, FONT, (255, 255, 255))
+            btn_queen = draw_button("Queen", WIDTH // 2 - 50, HEIGHT // 2 - 100, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+            btn_rook = draw_button("Rook", WIDTH // 2 - 50, HEIGHT // 2 - 40, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+            btn_bishop = draw_button("Bishop", WIDTH // 2 - 50, HEIGHT // 2 + 20, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+            btn_knight = draw_button("Knight", WIDTH // 2 - 50, HEIGHT // 2 + 80, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        
+        
         
         pygame.display.flip()
 
