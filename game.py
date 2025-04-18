@@ -3,6 +3,7 @@ import chess
 from chess_game import ChessGame
 import sys
 import os
+import json
 from Engine.engine import Engine
 
 if getattr(sys, 'frozen', False):
@@ -47,6 +48,268 @@ MENU_COLOR = (100, 100, 100)
 HOVER_COLOR = (255, 0, 0)
 menu_background = pygame.image.load(os.path.join(image_path, "landscape4.png"))
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
+
+
+class HeuristicEvaluator:
+    def __init__(self):
+        self.piece_values = {
+            'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000
+        }
+        self._init_piece_square_tables()
+        self.game_phase_weights = {
+            'opening': {'material': 1.0, 'position': 0.8, 'pawn_structure': 0.6, 
+                       'mobility': 0.7, 'threats': 0.9},
+            'endgame': {'material': 0.8, 'position': 0.5, 'pawn_structure': 1.2, 
+                       'king_activity': 1.5, 'threats': 1.1}
+        }
+
+    def _init_piece_square_tables(self):
+        self.tables = {
+            'P': [
+                0,   5,   5, -10, -10,   5,   5,   0,
+                5,  10,  10,   0,   0,  10,  10,   5,
+                5,  10,  20,  20,  20,  20,  10,   5,
+                10,  20,  20,  30,  30,  20,  20,  10,
+                10,  20,  20,  30,  30,  20,  20,  10,
+                5,  10,  20,  20,  20,  20,  10,   5,
+                5,  10,  10,   0,   0,  10,  10,   5,
+                0,   5,   5, -10, -10,   5,   5,   0,
+            ],
+            'N': [
+                -50,-40,-30,-30,-30,-30,-40,-50,
+                -40,-20,  0,   5,   5,  0,-20,-40,
+                -30,  5, 10,  15,  15, 10,  5,-30,
+                -30,  0, 15,  20,  20, 15,  0,-30,
+                -30,  5, 15,  20,  20, 15,  5,-30,
+                -30,  0, 10,  15,  15, 10,  0,-30,
+                -40,-20,  0,   0,   0,  0,-20,-40,
+                -50,-40,-30,-30,-30,-30,-40,-50,
+            ],
+            'B': [
+                -20,-10,-10,-10,-10,-10,-10,-20,
+                -10,  5,  0,   0,   0,  0,  5,-10,
+                -10, 10, 10,  10,  10, 10, 10,-10,
+                -10,  0, 10,  10,  10, 10,  0,-10,
+                -10,  5,  5,  10,  10,  5,  5,-10,
+                -10,  0,  5,  10,  10,  5,  0,-10,
+                -10,  0,  0,   0,   0,  0,  0,-10,
+                -20,-10,-10,-10,-10,-10,-10,-20,
+            ],
+            'R': [
+                0,   0,   5,  10,  10,   5,   0,   0,
+                0,   0,   5,  10,  10,   5,   0,   0,
+                0,   0,   5,  10,  10,   5,   0,   0,
+                0,   0,   5,  10,  10,   5,   0,   0,
+                0,   0,   5,  10,  10,   5,   0,   0,
+                0,   0,   5,  10,  10,   5,   0,   0,
+                25,  25,  25,  25,  25,  25,  25,  25,
+                0,   0,   5,  10,  10,   5,   0,   0,
+            ],
+            'Q': [
+                -20,-10,-10, -5,  -5,-10,-10,-20,
+                -10,  0,  0,   0,   0,  0,  0,-10,
+                -10,  0,  5,   5,   5,  5,  0,-10,
+                -5,  0,  5,   5,   5,  5,  0, -5,
+                0,  0,  5,   5,   5,  5,  0, -5,
+                -10,  5,  5,   5,   5,  5,  0,-10,
+                -10,  0,  5,   0,   0,  0,  0,-10,
+                -20,-10,-10, -5,  -5,-10,-10,-20,
+            ],
+            'K': [
+                -30,-40,-40,-50,-50,-40,-40,-30,
+                -30,-40,-40,-50,-50,-40,-40,-30,
+                -30,-40,-40,-50,-50,-40,-40,-30,
+                -30,-40,-40,-50,-50,-40,-40,-30,
+                -20,-30,-30,-40,-40,-30,-30,-20,
+                -10,-20,-20,-20,-20,-20,-20,-10,
+                20, 20,  0,   0,   0,  0, 20, 20,
+                20, 30, 10,   0,   0, 10, 30, 20,
+            ]
+        }
+
+    def evaluate_board(self, board):
+        game_phase = self._detect_game_phase(board)
+        weights = self.game_phase_weights[game_phase]
+        
+        score = 0
+        score += self._calculate_material(board) * weights['material']
+        score += self._piece_square_evaluation(board) * weights['position']
+        score += self._evaluate_pawn_structure(board) * weights.get('pawn_structure', 1.0)
+        score += self._mobility_evaluation(board) * weights.get('mobility', 1.0)
+        score += self._evaluate_hanging_pieces(board) * weights.get('threats', 1.0)
+        score += self._safety_evaluation(board)  # Thành phần an toàn quân thêm vào
+
+        if game_phase == 'endgame':
+            score += self._king_activity_evaluation(board) * weights['king_activity']
+        
+        if board.is_repetition(count=2):
+            score -= 500 if board.turn == chess.WHITE else -500
+            
+        return score
+    
+    def _safety_evaluation(self, board):
+        safety_penalty = 0
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece:
+                attackers = board.attackers(not piece.color, square)
+                defenders = board.attackers(piece.color, square)
+                # Nếu quân bị tấn công nhiều hơn được bảo vệ
+                if len(attackers) > len(defenders):
+                    # Áp dụng phạt theo giá trị quân
+                    value = self.piece_values.get(piece.symbol().upper(), 0)
+                    penalty = (len(attackers) - len(defenders)) * value * 0.02  # điều chỉnh hệ số phù hợp
+                    safety_penalty += penalty if piece.color == chess.WHITE else -penalty
+        return safety_penalty
+
+    def _detect_game_phase(self, board):
+        queen_count = len(board.pieces(chess.QUEEN, chess.WHITE)) + len(board.pieces(chess.QUEEN, chess.BLACK))
+        minor_pieces = len(board.pieces(chess.BISHOP, chess.WHITE)) + len(board.pieces(chess.BISHOP, chess.BLACK)) + \
+                      len(board.pieces(chess.KNIGHT, chess.WHITE)) + len(board.pieces(chess.KNIGHT, chess.BLACK))
+        return 'endgame' if queen_count == 0 and minor_pieces <= 2 else 'opening'
+
+    def _evaluate_hanging_pieces(self, board):
+        hanging_score = 0
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece:
+                attackers = board.attackers(not piece.color, square)
+                defenders = board.attackers(piece.color, square)
+                # Nếu số tấn công vượt quá số bảo vệ, quân đó đang "treo"
+                if len(attackers) > len(defenders):
+                    value = self.piece_values.get(piece.symbol().upper(), 0)
+                    # Nếu quân là quan trọng (ví dụ: Q, R) thì phạt cao hơn
+                    if piece.symbol().upper() in ['Q', 'R']:
+                        factor = 0.5
+                    else:
+                        factor = 0.3
+                    # Cộng dồn phạt theo màu: bên tấn công sẽ được cộng (hoặc trừ điểm đối với đối thủ)
+                    hanging_score += value * factor if piece.color == chess.WHITE else -value * factor
+        return hanging_score
+
+    def _mobility_evaluation(self, board):
+        mobility = 0
+        for color in [chess.WHITE, chess.BLACK]:
+            temp_board = board.copy(stack=False)
+            temp_board.turn = color
+            attack_weight = 0
+            for move in temp_board.legal_moves:
+                if temp_board.is_capture(move):
+                    captured_piece = temp_board.piece_at(move.to_square)
+                    if captured_piece:
+                        base_value = self.piece_values.get(captured_piece.symbol().upper(), 0)
+                        multiplier = 0.1
+                        # Giả lập nước đi và kiểm tra an toàn của quân bắt
+                        temp_board.push(move)
+                        # Nếu ô mà quân vừa di chuyển không bị tấn công bởi quân đối phương, tăng multiplier
+                        if not temp_board.attackers(not color, move.to_square):
+                            multiplier *= 1.5
+                        # Nếu ô đó bị ít các cuộc tấn công hơn so với số lượng bảo vệ, tăng thêm một chút
+                        else:
+                            attackers = temp_board.attackers(not color, move.to_square)
+                            defenders = temp_board.attackers(color, move.to_square)
+                            if len(defenders) >= len(attackers):
+                                multiplier *= 1.2
+                        temp_board.pop()
+                        attack_weight += base_value * multiplier
+            mobility += attack_weight * (1 if color == chess.WHITE else -1)
+        return mobility * 50
+
+    def _calculate_material(self, board):
+        material = 0
+        for piece in board.piece_map().values():
+            value = self.piece_values.get(piece.symbol().upper(), 0)
+            material += value if piece.color == chess.WHITE else -value
+        return material
+
+    def _piece_square_evaluation(self, board):
+        position_score = 0
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece:
+                symbol = piece.symbol().upper()
+                table = self.tables.get(symbol)
+                if table:
+                    pos = square if piece.color == chess.WHITE else chess.square_mirror(square)
+                    position_score += table[pos] if piece.color == chess.WHITE else -table[pos]
+        return position_score
+
+    def _evaluate_pawn_structure(self, board):
+        # Placeholder for pawn structure logic
+        return 0
+
+    
+def save_human_move(fen, move):
+    """
+    Lưu trạng thái FEN và nước đi của người chơi vào file human_memory.json.
+    """
+    memory_file = "human_memory.json"
+    try:
+        with open(memory_file, "r") as f:
+            memory = json.load(f)
+    except FileNotFoundError:
+        memory = {}
+
+    memory[fen] = move.uci()
+
+    with open(memory_file, "w") as f:
+        json.dump(memory, f, indent=4)
+
+def load_human_memory():
+    """
+    Tải dữ liệu từ file human_memory.json.
+    """
+    memory_file = "human_memory.json"
+    try:
+        with open(memory_file, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+def save_memory(fen, best_move):
+    """
+    Lưu trạng thái FEN và nước đi (dạng UCI) vào file memory.json.
+    Nếu file chưa tồn tại, tạo mới.
+    
+    Tham số:
+      fen (str): Trạng thái FEN của bàn cờ.
+      best_move (chess.Move): Nước đi mà AI đã chọn, sẽ được chuyển về dạng UCI.
+    """
+    memory_file = "memory.json"
+
+    # Tải dữ liệu đã có
+    try:
+        with open(memory_file, "r") as f:
+            memory = json.load(f)
+    except FileNotFoundError:
+        memory = {}
+
+    # Lưu trạng thái FEN và nước đi tương ứng (convert move về UCI string)
+    memory[fen] = best_move.uci()
+
+    # Ghi lại dữ liệu vào file memory.json
+    with open(memory_file, "w") as f:
+        json.dump(memory, f, indent=4)
+
+def load_memory():
+    """
+    Tải dữ liệu từ file memory.json.
+    
+    Trả về:
+      dict: Bản đồ {FEN: best_move_uci, ...}
+    """
+    memory_file = "memory.json"
+    try:
+        with open(memory_file, "r") as f:
+            memory = json.load(f)
+        return memory
+    except FileNotFoundError:
+        return {}
+if getattr(sys, 'frozen', False):  # Đang chạy từ .exe
+    bundle_dir = sys._MEIPASS
+else:
+    bundle_dir = os.path.dirname(os.path.abspath(__file__))
+
 
 def draw_text(text, x, y, center=True, color=BLACK):
     label = FONT.render(text, True, color)
@@ -97,6 +360,145 @@ def draw_button(text, x, y, w, h, color, hover_color, mouse_pos):
     draw_text(text, x + w // 2, y + h // 2, center=True, color=WHITE)
     return rect
 
+#def evaluate_board(board):
+    # Giá trị quân cờ (đơn vị điểm cơ bản)
+    piece_values = {
+        'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000
+    }
+    # Bảng điểm vị trí (piece-square tables) cho từng quân (định nghĩa theo từng ô từ a1 đến h8)
+    pawn_table = [
+         0,   5,   5, -10, -10,   5,   5,   0,
+         5,  10,  10,   0,   0,  10,  10,   5,
+         5,  10,  20,  20,  20,  20,  10,   5,
+        10,  20,  20,  30,  30,  20,  20,  10,
+        10,  20,  20,  30,  30,  20,  20,  10,
+         5,  10,  20,  20,  20,  20,  10,   5,
+         5,  10,  10,   0,   0,  10,  10,   5,
+         0,   5,   5, -10, -10,   5,   5,   0,
+    ]
+    knight_table = [
+        -50,-40,-30,-30,-30,-30,-40,-50,
+        -40,-20,  0,   5,   5,  0,-20,-40,
+        -30,  5, 10,  15,  15, 10,  5,-30,
+        -30,  0, 15,  20,  20, 15,  0,-30,
+        -30,  5, 15,  20,  20, 15,  5,-30,
+        -30,  0, 10,  15,  15, 10,  0,-30,
+        -40,-20,  0,   0,   0,  0,-20,-40,
+        -50,-40,-30,-30,-30,-30,-40,-50,
+    ]
+    bishop_table = [
+        -20,-10,-10,-10,-10,-10,-10,-20,
+        -10,  5,  0,   0,   0,  0,  5,-10,
+        -10, 10, 10,  10,  10, 10, 10,-10,
+        -10,  0, 10,  10,  10, 10,  0,-10,
+        -10,  5,  5,  10,  10,  5,  5,-10,
+        -10,  0,  5,  10,  10,  5,  0,-10,
+        -10,  0,  0,   0,   0,  0,  0,-10,
+        -20,-10,-10,-10,-10,-10,-10,-20,
+    ]
+    rook_table = [
+         0,   0,   5,  10,  10,   5,   0,   0,
+         0,   0,   5,  10,  10,   5,   0,   0,
+         0,   0,   5,  10,  10,   5,   0,   0,
+         0,   0,   5,  10,  10,   5,   0,   0,
+         0,   0,   5,  10,  10,   5,   0,   0,
+         0,   0,   5,  10,  10,   5,   0,   0,
+        25,  25,  25,  25,  25,  25,  25,  25,
+         0,   0,   5,  10,  10,   5,   0,   0,
+    ]
+    queen_table = [
+        -20,-10,-10, -5,  -5,-10,-10,-20,
+        -10,  0,  0,   0,   0,  0,  0,-10,
+        -10,  0,  5,   5,   5,  5,  0,-10,
+         -5,  0,  5,   5,   5,  5,  0, -5,
+          0,  0,  5,   5,   5,  5,  0, -5,
+        -10,  5,  5,   5,   5,  5,  0,-10,
+        -10,  0,  5,   0,   0,  0,  0,-10,
+        -20,-10,-10, -5,  -5,-10,-10,-20,
+    ]
+    king_table = [
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -20,-30,-30,-40,-40,-30,-30,-20,
+        -10,-20,-20,-20,-20,-20,-20,-10,
+         20, 20,  0,   0,   0,  0, 20, 20,
+         20, 30, 10,   0,   0, 10, 30, 20,
+    ]
+    score = 0
+    for square in chess.SQUARES:
+        piece = board.piece_at(square)
+        if piece:
+            symbol = piece.symbol().upper()
+            value = piece_values.get(symbol, 0)
+            # Với quân trắng dùng trực tiếp vị trí, với quân đen dùng vị trí được đảo qua square_mirror
+            if piece.color == chess.WHITE:
+                if symbol == 'P':
+                    table_value = pawn_table[square]
+                elif symbol == 'N':
+                    table_value = knight_table[square]
+                elif symbol == 'B':
+                    table_value = bishop_table[square]
+                elif symbol == 'R':
+                    table_value = rook_table[square]
+                elif symbol == 'Q':
+                    table_value = queen_table[square]
+                elif symbol == 'K':
+                    table_value = king_table[square]
+                score += value + table_value
+            else:
+                mirror = chess.square_mirror(square)
+                if symbol == 'P':
+                    table_value = pawn_table[mirror]
+                elif symbol == 'N':
+                    table_value = knight_table[mirror]
+                elif symbol == 'B':
+                    table_value = bishop_table[mirror]
+                elif symbol == 'R':
+                    table_value = rook_table[mirror]
+                elif symbol == 'Q':
+                    table_value = queen_table[mirror]
+                elif symbol == 'K':
+                    table_value = king_table[mirror]
+                score -= value + table_value
+    return score
+
+# def minimax(board, depth, maximizing_player):
+#     if depth == 0 or board.is_game_over():
+#         return evaluate_board(board)
+
+#     legal_moves = list(board.legal_moves)
+#     if maximizing_player:
+#         max_eval = float('-inf')
+#         for move in legal_moves:
+#             board.push(move)
+#             eval = minimax(board, depth - 1, False)  # Tới lượt đối thủ
+#             max_eval = max(max_eval, eval)
+#             board.pop()
+#         return max_eval
+#     else:
+#         min_eval = float('inf')
+#         for move in legal_moves:
+#             board.push(move)
+#             eval = minimax(board, depth - 1, True)  # Tới lượt mình
+#             min_eval = min(min_eval, eval)
+#             board.pop()
+#         return min_eval
+    
+# def iterative_deepening(board, max_depth):
+#     best_move = None
+#     for depth in range(1, max_depth + 1):
+#         best_eval = float('-inf')
+#         legal_moves = list(board.legal_moves)
+#         for move in legal_moves:
+#             board.push(move)
+#             move_eval = minimax(board, depth - 1, False)
+#             if move_eval > best_eval:
+#                 best_eval = move_eval
+#                 best_move = move
+#             board.pop()
+#     return best_move
 def notification(game, message):
     while True:
         screen.blit(menu_background, (0, 0))
