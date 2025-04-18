@@ -1,5 +1,9 @@
 ('C:\\Users\\ASUS\\OneDrive\\MetaMask\\Co_vua_BTL\\build\\game\\PYZ-00.pyz',
- [('__future__',
+ [('Engine', '-', 'PYMODULE'),
+  ('Engine.engine',
+   'C:\\Users\\ASUS\\OneDrive\\MetaMask\\Co_vua_BTL\\Engine\\engine.py',
+   'PYMODULE'),
+  ('__future__',
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\__future__.py',
    'PYMODULE'),
@@ -1617,6 +1621,12 @@
   ('statistics',
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\\Lib\\statistics.py',
+   'PYMODULE'),
+  ('stockfish',
+   'C:\\Users\\ASUS\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\stockfish\\__init__.py',
+   'PYMODULE'),
+  ('stockfish.models',
+   'C:\\Users\\ASUS\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python311\\site-packages\\stockfish\\models.py',
    'PYMODULE'),
   ('string',
    'C:\\Program '

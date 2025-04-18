@@ -5,7 +5,7 @@ a = Analysis(
     ['game.py'],
     pathex=[],
     binaries=[],
-    datas=[('Music', 'Music'), ('Image', 'Image'), ('Font', 'Font')],
+    datas=[('Music', 'Music'), ('Image', 'Image'), ('Font', 'Font'), ('Engine/stockfish/stockfish.exe', 'Engine/stockfish')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
