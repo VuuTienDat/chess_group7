@@ -3,6 +3,7 @@ import chess
 from chess_game import ChessGame
 import sys
 import os
+from Engine.engine import Engine
 
 import json
 
@@ -196,147 +197,6 @@ class HeuristicEvaluator:
         # Placeholder for pawn structure logic
         return 0
 
-# 7
-    def evaluate_king_safety(board, game_phase):
-        """Tổng hợp yếu tố an toàn Vua (Bot = Đen)"""
-        safety_score = 0
-        
-        # Đánh giá cho cả 2 bên nhưng ưu tiên góc nhìn của Đen
-        for color in [chess.BLACK, chess.WHITE]:
-            # 1. Điểm nguy hiểm (dương nếu Bot bị đe dọa, âm nếu Người chơi bị đe dọa)
-            safety_score += calculate_king_danger(board, color)
-            
-            # 2. Phạt Vua ở trung tâm (dương nếu Bot bị phạt, âm nếu Người chơi bị phạt)
-            safety_score += evaluate_king_center_penalty(board, color, game_phase)
-            
-            # 3. Điểm nhập thành (dương nếu Bot đã nhập thành, âm nếu Người chơi đã nhập thành)
-            safety_score += evaluate_castling(board, color, game_phase)
-        
-        return safety_score  # Tổng điểm dương = Bot an toàn hơn
-
-    def calculate_king_danger(board, color):
-        """Tính nguy hiểm cho Vua (Bot = Đen)"""
-        king_square = board.king(color)
-        if king_square is None:
-            return 0
-        
-        danger_score = 0
-        enemy_color = not color
-        attack_weights = {
-            chess.PAWN: 2,
-            chess.KNIGHT: 3,
-            chess.BISHOP: 3,
-            chess.ROOK: 4,
-            chess.QUEEN: 5
-        }
-
-        # Quét 8 hướng quanh Vua
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                if dx == 0 and dy == 0:
-                    continue  # Bỏ qua ô Vua đứng
-                
-                file = chess.square_file(king_square) + dx
-                rank = chess.square_rank(king_square) + dy
-                
-                if 0 <= file < 8 and 0 <= rank < 8:
-                    target_square = chess.square(file, rank)
-                    attackers = board.attackers(enemy_color, target_square)
-                    
-                    for attacker in attackers:
-                        piece = board.piece_at(attacker)
-                        if piece and piece.piece_type in attack_weights:
-                            # Điểm dương nếu Bot (Đen) bị tấn công, âm nếu Người chơi bị tấn công
-                            danger_score += attack_weights[piece.piece_type]
-
-        # Đảo dấu để điểm dương = Bot (Đen) gặp nguy hiểm
-        return danger_score if color == chess.BLACK else -danger_score
-
-    def evaluate_king_center_penalty(board, color, game_phase):
-        """Phạt Vua ở trung tâm (Bot = Đen)"""
-        if game_phase != 'opening':
-            return 0
-        
-        king_square = board.king(color)
-        if king_square is None:
-            return 0
-        
-        CENTER_SQUARES = [chess.D4, chess.E4, chess.D5, chess.E5,
-                        chess.D3, chess.E3, chess.D6, chess.E6]
-        
-        penalty = 0
-        if king_square in CENTER_SQUARES:
-            penalty = 40  # Phạt Bot (dương)
-        elif king_square == (chess.E8 if color == chess.BLACK else chess.E1):
-            penalty = 60  # Phạt nặng nếu Bot chưa nhập thành
-        
-        # Điểm dương nếu Bot bị phạt, âm nếu Người chơi bị phạt
-        return penalty if color == chess.BLACK else -penalty
-
-    def evaluate_castling(board, color, game_phase):
-        """Đánh giá nhập thành (Bot = Đen)"""
-        if game_phase == 'endgame':
-            return 0
-        
-        castling_bonus = 0
-        king_square = board.king(color)
-        
-        # Vị trí nhập thành chuẩn
-        castled_positions = {
-            chess.BLACK: [chess.G8, chess.C8],
-            chess.WHITE: [chess.G1, chess.C1]
-        }
-        
-        if king_square in castled_positions[color]:
-            castling_bonus = 35  # Thưởng Bot (dương)
-        elif board.has_castling_rights(color):
-            castling_bonus = -25  # Phạt Bot (âm)
-        
-        # Điểm dương nếu Bot an toàn, âm nếu Người chơi an toàn
-        return castling_bonus if color == chess.BLACK else -castling_bonus
-# 8
-    def king_activity_evaluation(board):
-            """Đánh giá hoạt động Vua trong tàn cuộc (Bot = Đen)"""
-            if get_game_phase(board) != 'endgame':
-                return 0
-            
-            CENTER = (3.5, 3.5)
-            MAX_BONUS = 30
-            total = 0
-            
-            for color in [chess.BLACK, chess.WHITE]:  # Duyệt Đen trước
-                king_square = board.king(color)
-                if not king_square:
-                    continue
-                
-                file = chess.square_file(king_square)
-                rank = chess.square_rank(king_square)
-                distance = math.sqrt((file - CENTER[0])**2 + (rank - CENTER[1])**2)
-                bonus = MAX_BONUS * (1 - distance / 4.95)
-                
-                # Đảo ngược logic: Thưởng Đen (+), phạt Trắng (-)
-                total += bonus if color == chess.BLACK else -bonus
-            
-            return int(total)
-    
-    # Định nghĩa lại PIECE_VALUES (Bot = Đen có giá trị dương)
-    PIECE_VALUES = {
-        'P': -100, 'N': -300, 'B': -300, 'R': -500, 'Q': -900, 'K': 0,  # Trắng
-        'p': 100, 'n': 300, 'b': 300, 'r': 500, 'q': 900, 'k': 0         # Đen (bot)
-    }
-
-    def get_game_phase(board):
-        """Xác định giai đoạn (Bot = Đen)"""
-        # Tính tổng giá trị vật chất từ góc nhìn bot (quân Đen là dương)
-        material = sum(PIECE_VALUES[p.symbol()] for p in board.piece_map().values())
-        
-        # Ngưỡng điều chỉnh (ví dụ)
-        if material < -2000:    # Khi bot (Đen) mất nhiều quân
-            return 'endgame'
-        elif material > 2000:   # Khi bot còn nhiều quân
-            return 'opening'
-        return 'middlegame'
-    
     
 def save_human_move(fen, move):
     """
@@ -409,7 +269,6 @@ if getattr(sys, 'frozen', False):  # Đang chạy từ .exe
 else:
     bundle_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Sử dụng bundle_dir để tham chiếu đến các file bên trong .exe
 music_path = os.path.join(bundle_dir, "Music")
 image_path = os.path.join(bundle_dir, "Image")
 font_path = os.path.join(bundle_dir, "Font")
@@ -421,10 +280,9 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Game")
 pygame.mixer.init()
 
-# Đảm bảo bạn tham chiếu đúng các tài nguyên từ sys._MEIPASS
-pygame.mixer.music.load(os.path.join(music_path, "chessmusic.mp3"))  # đường dẫn tới file nhạc
-pygame.mixer.music.play(-1)  # lặp vô hạn
-music_on = True  # Biến để kiểm soát trạng thái nhạc
+pygame.mixer.music.load(os.path.join(music_path, "chessmusic.mp3"))
+pygame.mixer.music.play(-1)
+music_on = True
 move_sound = pygame.mixer.Sound(os.path.join(music_path, "Move.mp3"))
 capture_sound = pygame.mixer.Sound(os.path.join(music_path, "Capture.mp3"))
 check_sound = pygame.mixer.Sound(os.path.join(music_path, "Check.mp3"))
@@ -432,7 +290,6 @@ checkmate_sound = pygame.mixer.Sound(os.path.join(music_path, "Checkmate.mp3"))
 
 board_colors = [(240, 217, 181), (181, 136, 99)]
 
-# Load ảnh quân cờ từ sys._MEIPASS
 images = {}
 pieces = ["P", "N", "B", "R", "Q", "K"]
 for color in ["w", "b"]:
@@ -442,11 +299,11 @@ for color in ["w", "b"]:
             pygame.image.load(os.path.join(image_path, f"{name}.png")), (SQUARE_SIZE, SQUARE_SIZE)
         )
 
-FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 40)  # Cập nhật đường dẫn font
+FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 40)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-MENU_COLOR = (100, 100, 100)  # Default button color
-HOVER_COLOR = (255, 0, 0)     # Hover color for buttons
+MENU_COLOR = (100, 100, 100)
+HOVER_COLOR = (255, 0, 0)
 menu_background = pygame.image.load(os.path.join(image_path, "landscape4.png"))
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
 
@@ -474,14 +331,13 @@ def draw_pieces(game):
             row = 7 - chess.square_rank(square)
             name = ('w' if piece.color == chess.WHITE else 'b') + piece.symbol().upper()
             screen.blit(images[name], (col * SQUARE_SIZE, row * SQUARE_SIZE))
-        
 
 def get_square_from_mouse(pos):
     x, y = pos
     col = x // SQUARE_SIZE
     row = 7 - (y // SQUARE_SIZE)
-    
     return chess.square(col, row)
+
 def draw_move_hints(game, selected_square):
     for move in game.board.legal_moves:
         if move.from_square == selected_square:
@@ -662,6 +518,7 @@ def notification(message):
 
 def play_vs_ai():
     game = ChessGame()
+    engine = Engine()
     running = True
     while running:
         draw_board()
@@ -670,38 +527,45 @@ def play_vs_ai():
         btn_undo = draw_button("Undo", 10, 660, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
         btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         draw_move_hints(game, game.selected_square)
-        
-        selected = None 
+    
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame. MOUSEBUTTONDOWN:
+                # Kiểm tra nút Undo, Back trước
                 if btn_undo.collidepoint(event.pos):
                     game.undo()
                 elif btn_back.collidepoint(event.pos):
                     running = False
-
-                square = get_square_from_mouse(event.pos)
-                piece = game.get_piece(square)
-
-                if selected:
-                    target_piece = game.get_piece(square)
-                    move_successful = game.move(selected, square)
-
-                    if move_successful:
-                        if game.board.is_checkmate():  # Nếu chiếu hết
-                            checkmate_sound.play()
-                        if target_piece:  # Nếu có quân → ăn quân
-                            capture_sound.play()
-                        else: move_sound.play()  # Nếu không có quân → đi quân
-                        
-                        if game.board.is_check():  # Sau khi đi xong, kiểm tra chiếu
-                            check_sound.play()
-                        selected = None
+                else:
+                    square = get_square_from_mouse(event.pos)
+                    piece = game.get_piece(square)
+                    if game.selected_square:  # Đã chọn quân trước đó
+                        target_piece = game.get_piece(square)
+                        move_successful = game.move(game.selected_square, square)
+                        if move_successful:
+                            if game.board.is_checkmate():
+                                checkmate_sound.play()
+                            elif target_piece:
+                                capture_sound.play()
+                            else:
+                                move_sound.play()
+                            
+                            if game.board.is_check():
+                                check_sound.play()
+                            game.selected_square = None
+                        else:
+                            # Nếu nước đi không hợp lệ, chuyển lựa chọn nếu có quân của mình
+                            if piece and piece.color == game.board.turn:
+                                game.selected_square = square
+                            else:
+                                game.selected_square = None
                     else:
-                        game.selected_square = square if piece and piece.color == game.board.turn else None
+                        # Nếu chưa chọn, chọn quân nếu đúng lượt
+                        if piece and piece.color == game.board.turn:
+                            game.selected_square = square
         
         pygame.display.flip()
 
@@ -719,9 +583,9 @@ def play_vs_ai():
                 save_memory(current_fen, best_move)
                 game.board.push(best_move)
                 last_ai_move = best_move  # Cập nhật nước đi của AI
-            else:
-                notification("No legal move. Game Over.")
-                game.board.reset()
+            #else:
+            #    notification("No legal move. Game Over.")
+            #   game.board.reset()
 
         pygame.display.flip()
 
@@ -755,11 +619,8 @@ def play_1vs1():
                     piece = game.get_piece(square)
                     
                     if game.selected_square is not None:
-                        # Kiểm tra xem ô đích có quân để phát âm thanh phù hợp
                         target_piece = game.get_piece(square)
                         if game.move(game.selected_square, square):
-                          
-                            # Kiểm tra trạng thái trò chơi
                             if game.board.is_checkmate():
                                 checkmate_sound.play()
                                 winner = "White" if game.board.turn == chess.BLACK else "Black"
@@ -772,12 +633,10 @@ def play_1vs1():
                                 notification(game, "Draw: 75-move rule!")
                             elif game.board.is_fivefold_repetition():
                                 notification(game, "Draw: Fivefold repetition!")
-                                  # Phát âm thanh: ăn quân hoặc di chuyển
-                            if target_piece:  # Ăn quân hoặc bắt tốt qua đường
+                            if target_piece:
                                 capture_sound.play()
                             else:
                                 move_sound.play()
-                            # Phát âm thanh chiếu tướng
                             if game.board.is_check():
                                 check_sound.play()
                             game.selected_square = None
@@ -788,9 +647,6 @@ def play_1vs1():
         
         pygame.display.flip()
 
-
-
-# ------------------- MENU --------------------
 def main_menu():
     running = True
     while running:
@@ -832,12 +688,11 @@ def main_menu():
 
 def toggle_music():
     running = True
-    # Tạo thanh trượt ở giữa màn hình
     slider_rect = pygame.Rect(WIDTH//2 - 150, HEIGHT//2 - 20, 300, 40)
     handle_radius = 10
     slider_min = slider_rect.x
     clock = pygame.time.Clock()
-    volume = pygame.mixer.music.get_volume()  # Lấy âm lượng hiện tại
+    volume = pygame.mixer.music.get_volume()
 
     while running:
         for event in pygame.event.get():
@@ -845,45 +700,36 @@ def toggle_music():
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
-                # Nhấn Esc để quay lại menu
                 if event.key == pygame.K_ESCAPE:
                     running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     mouse_x, _ = event.pos
-                    # Kiểm tra xem nhấn vào nút Back hay không
                     back_rect = pygame.Rect(WIDTH//2 - 50, slider_rect.y + slider_rect.height + 40, 100, 40)
                     if back_rect.collidepoint(event.pos):
                         running = False
                     elif slider_rect.collidepoint(event.pos):
-                        # Tính âm lượng theo vị trí click
                         volume = (mouse_x - slider_min) / slider_rect.width
                         volume = max(0.0, min(volume, 1.0))
                         pygame.mixer.music.set_volume(volume)
             elif event.type == pygame.MOUSEMOTION:
-                if event.buttons[0]:  # Nếu chuột đang giữ chuột trái
+                if event.buttons[0]:
                     mouse_x, _ = event.pos
                     if slider_rect.collidepoint(event.pos):
                         volume = (mouse_x - slider_min) / slider_rect.width
                         volume = max(0.0, min(volume, 1.0))
                         pygame.mixer.music.set_volume(volume)
 
-        # Vẽ giao diện volume control
         screen.blit(menu_background, (0, 0))
         title = FONT.render("Adjust Volume", True, BLACK)
         screen.blit(title, (WIDTH//2 - title.get_width()//2, 100))
-
-        # Vẽ thanh trượt nền
         pygame.draw.rect(screen, (200, 200, 200), slider_rect)
-        # Vẽ phần đã điền dựa trên âm lượng hiện tại
         fill_width = int(slider_rect.width * volume)
         fill_rect = pygame.Rect(slider_min, slider_rect.y, fill_width, slider_rect.height)
         pygame.draw.rect(screen, (100, 100, 100), fill_rect)
-        # Vẽ tay cầm
         handle_x = slider_min + fill_width
         handle_y = slider_rect.y + slider_rect.height // 2
         pygame.draw.circle(screen, (255, 0, 0), (handle_x, handle_y), handle_radius)
-        # Vẽ nút Back
         back_rect = pygame.Rect(WIDTH//2 - 50, slider_rect.y + slider_rect.height + 40, 100, 40)
         pygame.draw.rect(screen, HOVER_COLOR, back_rect)
         back_text = FONT.render("Back", True, WHITE)
