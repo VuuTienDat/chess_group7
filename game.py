@@ -579,7 +579,12 @@ def play_vs_ai():
                         handle_move_outcome(game)
                 else:
                     if btn_undo.collidepoint(event.pos):
-                        game.undo()
+                        # Hoàn tác hai nước đi (AI và người chơi) nếu có
+                        if len(game.board.move_stack) >= 2:
+                            game.undo()  # Hoàn tác nước đi của AI
+                            game.undo()  # Hoàn tác nước đi của người chơi
+                        elif len(game.board.move_stack) == 1:
+                            game.undo()  # Hoàn tác nước đi duy nhất (của người chơi)
                         suggested_move = None
                     elif btn_help.collidepoint(event.pos):
                         if game.board.turn == chess.WHITE:
