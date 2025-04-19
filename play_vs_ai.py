@@ -181,9 +181,10 @@ def play_vs_ai():
                                             promotion_to = square
                                             continue
                                     
-                                    game.board.push(move)
-                                    suggested_move = None
-                                    handle_move_outcome(game, target_piece)
+                                    result = game.move(game.selected_square, square)
+                                    if result["valid"]:
+                                        suggested_move = None
+                                        handle_move_outcome(game, target_piece)
                                 else:
                                     game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
                             else:
@@ -210,36 +211,14 @@ def play_vs_ai():
         if game.board.turn != player_color and not promotion_dialog:
             try:
                 engine.set_position(game.board.fen())
-                uci_move = engine.get_best_move()
-                if not uci_move:
+                move = engine.get_best_move()
+                if not move:
                     print("[WARNING] AI couldn't find a move")
                     continue
                 
-                from_square = chess.square(
-                    ord(uci_move[0]) - ord('a'),
-                    int(uci_move[1]) - 1
-                )
-                to_square = chess.square(
-                    ord(uci_move[2]) - ord('a'),
-                    int(uci_move[3]) - 1
-                )
-                
-                if len(uci_move) == 5:
-                    promotion_piece = uci_move[4].upper()
-                    if promotion_piece == 'Q':
-                        move = chess.Move(from_square, to_square, promotion=chess.QUEEN)
-                    elif promotion_piece == 'R':
-                        move = chess.Move(from_square, to_square, promotion=chess.ROOK)
-                    elif promotion_piece == 'B':
-                        move = chess.Move(from_square, to_square, promotion=chess.BISHOP)
-                    elif promotion_piece == 'N':
-                        move = chess.Move(from_square, to_square, promotion=chess.KNIGHT)
-                else:
-                    move = chess.Move(from_square, to_square)
-                
                 if move in game.board.legal_moves:
                     game.board.push(move)
-                    target_piece = game.get_piece(to_square)
+                    target_piece = game.get_piece(move.to_square)
                     handle_move_outcome(game, target_piece)
 
             except Exception as e:

@@ -4,6 +4,7 @@ class ChessGame:
     def __init__(self):
         self.board = chess.Board()
         self.selected_square = None
+        self.move_history = []
 
     def get_piece(self, square):
         return self.board.piece_at(square)
@@ -34,7 +35,8 @@ class ChessGame:
             # Nước đi thường hoặc phong cấp với promotion đã chỉ định
             move = chess.Move(from_square, to_square, promotion=promotion)
             if move in self.board.legal_moves:
-                self.board.push(move)    
+                self.board.push(move)
+                self.move_history.append(move)
                 return {"valid": True, "promotion_required": False, "move": move}
             
             return {"valid": False, "promotion_required": False, "move": None}
@@ -42,3 +44,5 @@ class ChessGame:
     def undo(self):
         if self.board.move_stack:
             self.board.pop()
+            if self.move_history:
+                self.move_history.pop()

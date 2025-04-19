@@ -82,6 +82,9 @@ def play_ai_vs_ai():
                         int(uci_move[3]) - 1
                     )
                     
+                    # Initialize promotion as None by default
+                    promotion = None
+                    
                     # Handle promotion
                     if len(uci_move) == 5:
                         promotion_piece = uci_move[4].upper()
@@ -91,13 +94,15 @@ def play_ai_vs_ai():
                             'B': chess.BISHOP,
                             'N': chess.KNIGHT
                         }.get(promotion_piece)
-                        move = chess.Move(from_square, to_square, promotion=promotion)
-                    else:
-                        move = chess.Move(from_square, to_square)
+                    
+                    # Create move object for validation
+                    move = chess.Move(from_square, to_square, promotion=promotion)
                     
                     if move in game.board.legal_moves:
-                        target_piece = game.get_piece(to_square)
-                        handle_move_outcome(game, target_piece)
-                        last_move_time = current_time
+                        result = game.move(from_square, to_square, promotion)
+                        if result["valid"]:
+                            target_piece = game.get_piece(to_square)
+                            handle_move_outcome(game, target_piece)
+                            last_move_time = current_time
         
         pygame.display.flip()
