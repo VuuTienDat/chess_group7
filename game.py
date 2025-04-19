@@ -3,7 +3,6 @@ import chess
 from chess_game import ChessGame
 import sys
 import os
-import json
 from Engine.engine import Engine
 
 if getattr(sys, 'frozen', False):
@@ -49,268 +48,6 @@ HOVER_COLOR = (255, 0, 0)
 menu_background = pygame.image.load(os.path.join(image_path, "landscape4.png"))
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
 
-
-class HeuristicEvaluator:
-    def __init__(self):
-        self.piece_values = {
-            'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000
-        }
-        self._init_piece_square_tables()
-        self.game_phase_weights = {
-            'opening': {'material': 1.0, 'position': 0.8, 'pawn_structure': 0.6, 
-                       'mobility': 0.7, 'threats': 0.9},
-            'endgame': {'material': 0.8, 'position': 0.5, 'pawn_structure': 1.2, 
-                       'king_activity': 1.5, 'threats': 1.1}
-        }
-
-    def _init_piece_square_tables(self):
-        self.tables = {
-            'P': [
-                0,   5,   5, -10, -10,   5,   5,   0,
-                5,  10,  10,   0,   0,  10,  10,   5,
-                5,  10,  20,  20,  20,  20,  10,   5,
-                10,  20,  20,  30,  30,  20,  20,  10,
-                10,  20,  20,  30,  30,  20,  20,  10,
-                5,  10,  20,  20,  20,  20,  10,   5,
-                5,  10,  10,   0,   0,  10,  10,   5,
-                0,   5,   5, -10, -10,   5,   5,   0,
-            ],
-            'N': [
-                -50,-40,-30,-30,-30,-30,-40,-50,
-                -40,-20,  0,   5,   5,  0,-20,-40,
-                -30,  5, 10,  15,  15, 10,  5,-30,
-                -30,  0, 15,  20,  20, 15,  0,-30,
-                -30,  5, 15,  20,  20, 15,  5,-30,
-                -30,  0, 10,  15,  15, 10,  0,-30,
-                -40,-20,  0,   0,   0,  0,-20,-40,
-                -50,-40,-30,-30,-30,-30,-40,-50,
-            ],
-            'B': [
-                -20,-10,-10,-10,-10,-10,-10,-20,
-                -10,  5,  0,   0,   0,  0,  5,-10,
-                -10, 10, 10,  10,  10, 10, 10,-10,
-                -10,  0, 10,  10,  10, 10,  0,-10,
-                -10,  5,  5,  10,  10,  5,  5,-10,
-                -10,  0,  5,  10,  10,  5,  0,-10,
-                -10,  0,  0,   0,   0,  0,  0,-10,
-                -20,-10,-10,-10,-10,-10,-10,-20,
-            ],
-            'R': [
-                0,   0,   5,  10,  10,   5,   0,   0,
-                0,   0,   5,  10,  10,   5,   0,   0,
-                0,   0,   5,  10,  10,   5,   0,   0,
-                0,   0,   5,  10,  10,   5,   0,   0,
-                0,   0,   5,  10,  10,   5,   0,   0,
-                0,   0,   5,  10,  10,   5,   0,   0,
-                25,  25,  25,  25,  25,  25,  25,  25,
-                0,   0,   5,  10,  10,   5,   0,   0,
-            ],
-            'Q': [
-                -20,-10,-10, -5,  -5,-10,-10,-20,
-                -10,  0,  0,   0,   0,  0,  0,-10,
-                -10,  0,  5,   5,   5,  5,  0,-10,
-                -5,  0,  5,   5,   5,  5,  0, -5,
-                0,  0,  5,   5,   5,  5,  0, -5,
-                -10,  5,  5,   5,   5,  5,  0,-10,
-                -10,  0,  5,   0,   0,  0,  0,-10,
-                -20,-10,-10, -5,  -5,-10,-10,-20,
-            ],
-            'K': [
-                -30,-40,-40,-50,-50,-40,-40,-30,
-                -30,-40,-40,-50,-50,-40,-40,-30,
-                -30,-40,-40,-50,-50,-40,-40,-30,
-                -30,-40,-40,-50,-50,-40,-40,-30,
-                -20,-30,-30,-40,-40,-30,-30,-20,
-                -10,-20,-20,-20,-20,-20,-20,-10,
-                20, 20,  0,   0,   0,  0, 20, 20,
-                20, 30, 10,   0,   0, 10, 30, 20,
-            ]
-        }
-
-    def evaluate_board(self, board):
-        game_phase = self._detect_game_phase(board)
-        weights = self.game_phase_weights[game_phase]
-        
-        score = 0
-        score += self._calculate_material(board) * weights['material']
-        score += self._piece_square_evaluation(board) * weights['position']
-        score += self._evaluate_pawn_structure(board) * weights.get('pawn_structure', 1.0)
-        score += self._mobility_evaluation(board) * weights.get('mobility', 1.0)
-        score += self._evaluate_hanging_pieces(board) * weights.get('threats', 1.0)
-        score += self._safety_evaluation(board)  # Thành phần an toàn quân thêm vào
-
-        if game_phase == 'endgame':
-            score += self._king_activity_evaluation(board) * weights['king_activity']
-        
-        if board.is_repetition(count=2):
-            score -= 500 if board.turn == chess.WHITE else -500
-            
-        return score
-    
-    def _safety_evaluation(self, board):
-        safety_penalty = 0
-        for square in chess.SQUARES:
-            piece = board.piece_at(square)
-            if piece:
-                attackers = board.attackers(not piece.color, square)
-                defenders = board.attackers(piece.color, square)
-                # Nếu quân bị tấn công nhiều hơn được bảo vệ
-                if len(attackers) > len(defenders):
-                    # Áp dụng phạt theo giá trị quân
-                    value = self.piece_values.get(piece.symbol().upper(), 0)
-                    penalty = (len(attackers) - len(defenders)) * value * 0.02  # điều chỉnh hệ số phù hợp
-                    safety_penalty += penalty if piece.color == chess.WHITE else -penalty
-        return safety_penalty
-
-    def _detect_game_phase(self, board):
-        queen_count = len(board.pieces(chess.QUEEN, chess.WHITE)) + len(board.pieces(chess.QUEEN, chess.BLACK))
-        minor_pieces = len(board.pieces(chess.BISHOP, chess.WHITE)) + len(board.pieces(chess.BISHOP, chess.BLACK)) + \
-                      len(board.pieces(chess.KNIGHT, chess.WHITE)) + len(board.pieces(chess.KNIGHT, chess.BLACK))
-        return 'endgame' if queen_count == 0 and minor_pieces <= 2 else 'opening'
-
-    def _evaluate_hanging_pieces(self, board):
-        hanging_score = 0
-        for square in chess.SQUARES:
-            piece = board.piece_at(square)
-            if piece:
-                attackers = board.attackers(not piece.color, square)
-                defenders = board.attackers(piece.color, square)
-                # Nếu số tấn công vượt quá số bảo vệ, quân đó đang "treo"
-                if len(attackers) > len(defenders):
-                    value = self.piece_values.get(piece.symbol().upper(), 0)
-                    # Nếu quân là quan trọng (ví dụ: Q, R) thì phạt cao hơn
-                    if piece.symbol().upper() in ['Q', 'R']:
-                        factor = 0.5
-                    else:
-                        factor = 0.3
-                    # Cộng dồn phạt theo màu: bên tấn công sẽ được cộng (hoặc trừ điểm đối với đối thủ)
-                    hanging_score += value * factor if piece.color == chess.WHITE else -value * factor
-        return hanging_score
-
-    def _mobility_evaluation(self, board):
-        mobility = 0
-        for color in [chess.WHITE, chess.BLACK]:
-            temp_board = board.copy(stack=False)
-            temp_board.turn = color
-            attack_weight = 0
-            for move in temp_board.legal_moves:
-                if temp_board.is_capture(move):
-                    captured_piece = temp_board.piece_at(move.to_square)
-                    if captured_piece:
-                        base_value = self.piece_values.get(captured_piece.symbol().upper(), 0)
-                        multiplier = 0.1
-                        # Giả lập nước đi và kiểm tra an toàn của quân bắt
-                        temp_board.push(move)
-                        # Nếu ô mà quân vừa di chuyển không bị tấn công bởi quân đối phương, tăng multiplier
-                        if not temp_board.attackers(not color, move.to_square):
-                            multiplier *= 1.5
-                        # Nếu ô đó bị ít các cuộc tấn công hơn so với số lượng bảo vệ, tăng thêm một chút
-                        else:
-                            attackers = temp_board.attackers(not color, move.to_square)
-                            defenders = temp_board.attackers(color, move.to_square)
-                            if len(defenders) >= len(attackers):
-                                multiplier *= 1.2
-                        temp_board.pop()
-                        attack_weight += base_value * multiplier
-            mobility += attack_weight * (1 if color == chess.WHITE else -1)
-        return mobility * 50
-
-    def _calculate_material(self, board):
-        material = 0
-        for piece in board.piece_map().values():
-            value = self.piece_values.get(piece.symbol().upper(), 0)
-            material += value if piece.color == chess.WHITE else -value
-        return material
-
-    def _piece_square_evaluation(self, board):
-        position_score = 0
-        for square in chess.SQUARES:
-            piece = board.piece_at(square)
-            if piece:
-                symbol = piece.symbol().upper()
-                table = self.tables.get(symbol)
-                if table:
-                    pos = square if piece.color == chess.WHITE else chess.square_mirror(square)
-                    position_score += table[pos] if piece.color == chess.WHITE else -table[pos]
-        return position_score
-
-    def _evaluate_pawn_structure(self, board):
-        # Placeholder for pawn structure logic
-        return 0
-
-    
-def save_human_move(fen, move):
-    """
-    Lưu trạng thái FEN và nước đi của người chơi vào file human_memory.json.
-    """
-    memory_file = "human_memory.json"
-    try:
-        with open(memory_file, "r") as f:
-            memory = json.load(f)
-    except FileNotFoundError:
-        memory = {}
-
-    memory[fen] = move.uci()
-
-    with open(memory_file, "w") as f:
-        json.dump(memory, f, indent=4)
-
-def load_human_memory():
-    """
-    Tải dữ liệu từ file human_memory.json.
-    """
-    memory_file = "human_memory.json"
-    try:
-        with open(memory_file, "r") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-def save_memory(fen, best_move):
-    """
-    Lưu trạng thái FEN và nước đi (dạng UCI) vào file memory.json.
-    Nếu file chưa tồn tại, tạo mới.
-    
-    Tham số:
-      fen (str): Trạng thái FEN của bàn cờ.
-      best_move (chess.Move): Nước đi mà AI đã chọn, sẽ được chuyển về dạng UCI.
-    """
-    memory_file = "memory.json"
-
-    # Tải dữ liệu đã có
-    try:
-        with open(memory_file, "r") as f:
-            memory = json.load(f)
-    except FileNotFoundError:
-        memory = {}
-
-    # Lưu trạng thái FEN và nước đi tương ứng (convert move về UCI string)
-    memory[fen] = best_move.uci()
-
-    # Ghi lại dữ liệu vào file memory.json
-    with open(memory_file, "w") as f:
-        json.dump(memory, f, indent=4)
-
-def load_memory():
-    """
-    Tải dữ liệu từ file memory.json.
-    
-    Trả về:
-      dict: Bản đồ {FEN: best_move_uci, ...}
-    """
-    memory_file = "memory.json"
-    try:
-        with open(memory_file, "r") as f:
-            memory = json.load(f)
-        return memory
-    except FileNotFoundError:
-        return {}
-if getattr(sys, 'frozen', False):  # Đang chạy từ .exe
-    bundle_dir = sys._MEIPASS
-else:
-    bundle_dir = os.path.dirname(os.path.abspath(__file__))
-
-
 def draw_text(text, x, y, center=True, color=BLACK):
     label = FONT.render(text, True, color)
     rect = label.get_rect()
@@ -321,34 +58,78 @@ def draw_text(text, x, y, center=True, color=BLACK):
     screen.blit(label, rect)
     return rect
 
-def draw_board():
+def draw_board(flipped=False):
+    # Khởi tạo font để vẽ chữ
+    font = pygame.font.SysFont('arial', 20)
+    screen.blit(menu_background, (0, 0))  # Vẽ nền bàn cờ
+    # Vẽ các ô bàn cờ (bắt đầu từ (0, 0), không có viền)
     for row in range(8):
         for col in range(8):
+            # Điều chỉnh tọa độ dựa trên flipped
+            display_row = 7 - row if flipped else row
+            display_col = 7 - col if flipped else col
             color = board_colors[(row + col) % 2]
-            pygame.draw.rect(screen, color, (col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
+            pygame.draw.rect(screen, color, 
+                            (display_col * SQUARE_SIZE, display_row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
 
-def draw_pieces(game):
+    # Vẽ nhãn tọa độ
+    files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']  # Cột: a-h
+    ranks = ['8', '7', '6', '5', '4', '3', '2', '1']  # Hàng: 8-1 (từ trên xuống dưới)
+
+    # Điều chỉnh nhãn dựa trên flipped
+    if flipped:
+        files = files[::-1]  # Đảo ngược thứ tự cột: h-a
+        ranks = ranks[::-1]  # Đảo ngược thứ tự hàng: 1-8
+
+    # Vẽ nhãn cột (a-h) ở dưới cùng, sát mép bàn cờ
+    for col in range(8):
+        label = font.render(files[col], True, (0, 0, 0))  # Màu đen
+        screen.blit(label, (col * SQUARE_SIZE + SQUARE_SIZE // 2 - 10, 8 * SQUARE_SIZE + 5))
+
+    # Vẽ nhãn hàng (1-8) ở bên trái, sát mép bàn cờ
+    for row in range(8):
+        label = font.render(ranks[row], True, (0, 0, 0))  # Màu đen
+        screen.blit(label, (5, row * SQUARE_SIZE + SQUARE_SIZE // 2 - 10))
+def draw_pieces(game, flipped=False):
     for square in chess.SQUARES:
         piece = game.get_piece(square)
         if piece:
             col = chess.square_file(square)
             row = 7 - chess.square_rank(square)
+            # Điều chỉnh tọa độ hiển thị dựa trên flipped
+            display_col = 7 - col if flipped else col
+            display_row = 7 - row if flipped else row
             name = ('w' if piece.color == chess.WHITE else 'b') + piece.symbol().upper()
-            screen.blit(images[name], (col * SQUARE_SIZE, row * SQUARE_SIZE))
+            screen.blit(images[name], (display_col * SQUARE_SIZE, display_row * SQUARE_SIZE))
 
-def get_square_from_mouse(pos):
+def get_square_from_mouse(pos, flipped=False):
     x, y = pos
+    # Tính cột và hàng dựa trên tọa độ chuột
     col = x // SQUARE_SIZE
-    row = 7 - (y // SQUARE_SIZE)
+    row = y // SQUARE_SIZE
+    # Điều chỉnh cột và hàng dựa trên flipped
+    if flipped:
+        col = 7 - col
+        row = 7 - row
+    # Chuyển đổi thành số hàng chuẩn (0 ở dưới, 7 ở trên)
+    row = 7 - row
+    if not (0 <= col < 8 and 0 <= row < 8):
+        return None
     return chess.square(col, row)
 
-def draw_move_hints(game, selected_square):
+def draw_move_hints(game, selected_square, flipped=False):
+    if selected_square is None:
+        return
     for move in game.board.legal_moves:
         if move.from_square == selected_square:
             to_square = move.to_square
             col = chess.square_file(to_square)
             row = 7 - chess.square_rank(to_square)
-            center = (col * SQUARE_SIZE + SQUARE_SIZE // 2, row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            # Điều chỉnh tọa độ hiển thị dựa trên flipped
+            display_col = 7 - col if flipped else col
+            display_row = 7 - row if flipped else row
+            center = (display_col * SQUARE_SIZE + SQUARE_SIZE // 2, 
+                      display_row * SQUARE_SIZE + SQUARE_SIZE // 2)
             pygame.draw.circle(screen, (120, 150, 100), center, 15)
 
 def draw_button(text, x, y, w, h, color, hover_color, mouse_pos):
@@ -360,145 +141,8 @@ def draw_button(text, x, y, w, h, color, hover_color, mouse_pos):
     draw_text(text, x + w // 2, y + h // 2, center=True, color=WHITE)
     return rect
 
-#def evaluate_board(board):
-    # Giá trị quân cờ (đơn vị điểm cơ bản)
-    piece_values = {
-        'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 20000
-    }
-    # Bảng điểm vị trí (piece-square tables) cho từng quân (định nghĩa theo từng ô từ a1 đến h8)
-    pawn_table = [
-         0,   5,   5, -10, -10,   5,   5,   0,
-         5,  10,  10,   0,   0,  10,  10,   5,
-         5,  10,  20,  20,  20,  20,  10,   5,
-        10,  20,  20,  30,  30,  20,  20,  10,
-        10,  20,  20,  30,  30,  20,  20,  10,
-         5,  10,  20,  20,  20,  20,  10,   5,
-         5,  10,  10,   0,   0,  10,  10,   5,
-         0,   5,   5, -10, -10,   5,   5,   0,
-    ]
-    knight_table = [
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        -40,-20,  0,   5,   5,  0,-20,-40,
-        -30,  5, 10,  15,  15, 10,  5,-30,
-        -30,  0, 15,  20,  20, 15,  0,-30,
-        -30,  5, 15,  20,  20, 15,  5,-30,
-        -30,  0, 10,  15,  15, 10,  0,-30,
-        -40,-20,  0,   0,   0,  0,-20,-40,
-        -50,-40,-30,-30,-30,-30,-40,-50,
-    ]
-    bishop_table = [
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        -10,  5,  0,   0,   0,  0,  5,-10,
-        -10, 10, 10,  10,  10, 10, 10,-10,
-        -10,  0, 10,  10,  10, 10,  0,-10,
-        -10,  5,  5,  10,  10,  5,  5,-10,
-        -10,  0,  5,  10,  10,  5,  0,-10,
-        -10,  0,  0,   0,   0,  0,  0,-10,
-        -20,-10,-10,-10,-10,-10,-10,-20,
-    ]
-    rook_table = [
-         0,   0,   5,  10,  10,   5,   0,   0,
-         0,   0,   5,  10,  10,   5,   0,   0,
-         0,   0,   5,  10,  10,   5,   0,   0,
-         0,   0,   5,  10,  10,   5,   0,   0,
-         0,   0,   5,  10,  10,   5,   0,   0,
-         0,   0,   5,  10,  10,   5,   0,   0,
-        25,  25,  25,  25,  25,  25,  25,  25,
-         0,   0,   5,  10,  10,   5,   0,   0,
-    ]
-    queen_table = [
-        -20,-10,-10, -5,  -5,-10,-10,-20,
-        -10,  0,  0,   0,   0,  0,  0,-10,
-        -10,  0,  5,   5,   5,  5,  0,-10,
-         -5,  0,  5,   5,   5,  5,  0, -5,
-          0,  0,  5,   5,   5,  5,  0, -5,
-        -10,  5,  5,   5,   5,  5,  0,-10,
-        -10,  0,  5,   0,   0,  0,  0,-10,
-        -20,-10,-10, -5,  -5,-10,-10,-20,
-    ]
-    king_table = [
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -20,-30,-30,-40,-40,-30,-30,-20,
-        -10,-20,-20,-20,-20,-20,-20,-10,
-         20, 20,  0,   0,   0,  0, 20, 20,
-         20, 30, 10,   0,   0, 10, 30, 20,
-    ]
-    score = 0
-    for square in chess.SQUARES:
-        piece = board.piece_at(square)
-        if piece:
-            symbol = piece.symbol().upper()
-            value = piece_values.get(symbol, 0)
-            # Với quân trắng dùng trực tiếp vị trí, với quân đen dùng vị trí được đảo qua square_mirror
-            if piece.color == chess.WHITE:
-                if symbol == 'P':
-                    table_value = pawn_table[square]
-                elif symbol == 'N':
-                    table_value = knight_table[square]
-                elif symbol == 'B':
-                    table_value = bishop_table[square]
-                elif symbol == 'R':
-                    table_value = rook_table[square]
-                elif symbol == 'Q':
-                    table_value = queen_table[square]
-                elif symbol == 'K':
-                    table_value = king_table[square]
-                score += value + table_value
-            else:
-                mirror = chess.square_mirror(square)
-                if symbol == 'P':
-                    table_value = pawn_table[mirror]
-                elif symbol == 'N':
-                    table_value = knight_table[mirror]
-                elif symbol == 'B':
-                    table_value = bishop_table[mirror]
-                elif symbol == 'R':
-                    table_value = rook_table[mirror]
-                elif symbol == 'Q':
-                    table_value = queen_table[mirror]
-                elif symbol == 'K':
-                    table_value = king_table[mirror]
-                score -= value + table_value
-    return score
 
-# def minimax(board, depth, maximizing_player):
-#     if depth == 0 or board.is_game_over():
-#         return evaluate_board(board)
 
-#     legal_moves = list(board.legal_moves)
-#     if maximizing_player:
-#         max_eval = float('-inf')
-#         for move in legal_moves:
-#             board.push(move)
-#             eval = minimax(board, depth - 1, False)  # Tới lượt đối thủ
-#             max_eval = max(max_eval, eval)
-#             board.pop()
-#         return max_eval
-#     else:
-#         min_eval = float('inf')
-#         for move in legal_moves:
-#             board.push(move)
-#             eval = minimax(board, depth - 1, True)  # Tới lượt mình
-#             min_eval = min(min_eval, eval)
-#             board.pop()
-#         return min_eval
-    
-# def iterative_deepening(board, max_depth):
-#     best_move = None
-#     for depth in range(1, max_depth + 1):
-#         best_eval = float('-inf')
-#         legal_moves = list(board.legal_moves)
-#         for move in legal_moves:
-#             board.push(move)
-#             move_eval = minimax(board, depth - 1, False)
-#             if move_eval > best_eval:
-#                 best_eval = move_eval
-#                 best_move = move
-#             board.pop()
-#     return best_move
 def notification(game, message):
     while True:
         screen.blit(menu_background, (0, 0))
@@ -515,7 +159,42 @@ def notification(game, message):
                     game.move_history.clear()
                     main_menu()
         pygame.display.flip()
+def choose_player_color():
+    """
+    Hiển thị giao diện để người dùng chọn chơi quân trắng hoặc quân đen.
+    Trả về màu quân mà người dùng chọn (chess.WHITE hoặc chess.BLACK).
+    """
+    running = True
+    while running:
+        screen.blit(menu_background, (0, 0))
+        draw_text("Choose Your Color", WIDTH // 2, HEIGHT // 2 - 100, color=BLACK)
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Vẽ hai nút: Play as White và Play as Black
+        btn_white = draw_button("White", WIDTH // 2 - 100, HEIGHT // 2 - 40, 200, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        btn_black = draw_button("Black", WIDTH // 2 - 100, HEIGHT // 2 + 20, 200, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        btn_back = draw_button("Back", WIDTH // 2 - 100, HEIGHT // 2 + 80, 200, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if btn_white.collidepoint(event.pos):
+                    return chess.WHITE
+                elif btn_black.collidepoint(event.pos):
+                    return chess.BLACK
+                elif btn_back.collidepoint(event.pos):
+                    main_menu()
+                    return None
+
+        pygame.display.flip()
 def play_vs_ai():
+    # Hiển thị giao diện chọn màu quân
+    player_color = choose_player_color()
+    if player_color is None:  # Người dùng bấm "Back"
+        return
+
     game = ChessGame()
     engine = Engine()
     running = True
@@ -525,32 +204,44 @@ def play_vs_ai():
     promotion_to = None
     
     while running:
-        draw_board()
-        draw_pieces(game)
+        # Lật bàn cờ nếu người chơi chọn quân đen
+        flipped = (player_color == chess.BLACK)
+
+        # Xóa màn hình trước khi vẽ
+        screen.fill((0, 0, 0))  # Tô màu đen
+
+        draw_board(flipped=flipped)
+        draw_pieces(game, flipped=flipped)
         mouse_pos = pygame.mouse.get_pos()
         
         # Vẽ các nút
-        btn_undo = draw_button("Undo", 10, 660, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-        btn_help = draw_button("Help", 120, 660, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)
-        btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+        btn_undo = draw_button("Undo", 10, 675, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        btn_help = draw_button("Help", 120, 675, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)
+        btn_back = draw_button("Back", WIDTH - 110, 675, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         
         # Vẽ gợi ý nước đi cho ô được chọn
-        draw_move_hints(game, game.selected_square)
+        draw_move_hints(game, game.selected_square, flipped=flipped)
         
         # Tô sáng nước đi gợi ý nếu có
         if suggested_move:
-           # Tô sáng ô nguồn (from_square)
+            # Tô sáng ô nguồn (from_square)
             from_square = suggested_move.from_square
             from_col = chess.square_file(from_square)
             from_row = 7 - chess.square_rank(from_square)
-            from_center = (from_col * SQUARE_SIZE + SQUARE_SIZE // 2, from_row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            display_from_col = 7 - from_col if flipped else from_col
+            display_from_row = 7 - from_row if flipped else from_row
+            from_center = (display_from_col * SQUARE_SIZE + SQUARE_SIZE // 2, 
+                           display_from_row * SQUARE_SIZE + SQUARE_SIZE // 2)
             pygame.draw.circle(screen, (0, 0, 255), from_center, 20, 3)  # Vòng tròn xanh lam cho ô nguồn
             
             # Tô sáng ô đích (to_square)
             to_square = suggested_move.to_square
             to_col = chess.square_file(to_square)
             to_row = 7 - chess.square_rank(to_square)
-            to_center = (to_col * SQUARE_SIZE + SQUARE_SIZE // 2, to_row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            display_to_col = 7 - to_col if flipped else to_col
+            display_to_row = 7 - to_row if flipped else to_row
+            to_center = (display_to_col * SQUARE_SIZE + SQUARE_SIZE // 2, 
+                         display_to_row * SQUARE_SIZE + SQUARE_SIZE // 2)
             pygame.draw.circle(screen, (255, 255, 0), to_center, 20, 3)  # Vòng tròn vàng cho ô đích
        
         for event in pygame.event.get():
@@ -584,10 +275,10 @@ def play_vs_ai():
                             game.undo()  # Hoàn tác nước đi của AI
                             game.undo()  # Hoàn tác nước đi của người chơi
                         elif len(game.board.move_stack) == 1:
-                            game.undo()  # Hoàn tác nước đi duy nhất (của người chơi)
+                            game.undo()  # Hoàn tác nước đi duy nhất (của người chơi hoặc AI)
                         suggested_move = None
                     elif btn_help.collidepoint(event.pos):
-                        if game.board.turn == chess.WHITE:
+                        if game.board.turn == player_color:  # Chỉ gợi ý cho lượt của người chơi
                             engine.set_position(game.board.fen())
                             uci_move = engine.get_best_move()
                             if uci_move:
@@ -606,52 +297,49 @@ def play_vs_ai():
                     elif btn_back.collidepoint(event.pos):
                         running = False
                     else:
-                        x, y = event.pos
-                        col = x // SQUARE_SIZE
-                        row = 7 - (y // SQUARE_SIZE)
-                        if not (0 <= col < 8 and 0 <= row < 8):
-                            continue
-                        square = chess.square(col, row)
-                        piece = game.get_piece(square)
-                        
-                        
-                        if game.selected_square is not None:
-                            piece = game.get_piece(game.selected_square)
-                            target_piece = game.get_piece(square)
-                            move_result = game.move(game.selected_square, square)
-                            if move_result["valid"]:
-                                if move_result["promotion_required"]:
-                                    # Nếu nước đi là phong cấp, hiển thị hộp thoại phong cấp
-                                    promotion_dialog = True
-                                    promotion_from = game.selected_square
-                                    promotion_to = square
-                                else:
-                                    suggested_move = None
-                                    handle_move_outcome(game, target_piece)
-                            else:
-                                print(f"Nước đi không hợp lệ: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
-                                game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
-                        else:
+                        # Chỉ cho phép người chơi di chuyển khi đến lượt của họ
+                        if game.board.turn == player_color:
+                            square = get_square_from_mouse(event.pos, flipped=flipped)
+                            if square is None:
+                                continue
                             piece = game.get_piece(square)
-                            game.selected_square = square if piece and piece.color == game.board.turn else None
-                            print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
+                            
+                            if game.selected_square is not None:
+                                piece = game.get_piece(game.selected_square)
+                                target_piece = game.get_piece(square)
+                                move_result = game.move(game.selected_square, square)
+                                if move_result["valid"]:
+                                    if move_result["promotion_required"]:
+                                        # Nếu nước đi là phong cấp, hiển thị hộp thoại phong cấp
+                                        promotion_dialog = True
+                                        promotion_from = game.selected_square
+                                        promotion_to = square
+                                    else:
+                                        suggested_move = None
+                                        handle_move_outcome(game, target_piece)
+                                else:
+                                    print(f"Nước đi không hợp lệ: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                                    game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
+                            else:
+                                piece = game.get_piece(square)
+                                game.selected_square = square if piece and piece.color == game.board.turn else None
+                                print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
         
         if promotion_dialog:
-            #Vẽ giao diện chọn phong cấp
+            # Vẽ giao diện chọn phong cấp
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 150))
             screen.blit(overlay, (0, 0))
-            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, FONT, (255, 255, 255))
+            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, color=WHITE)
             btn_queen = draw_button("Queen", WIDTH // 2 - 50, HEIGHT // 2 - 100, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_rook = draw_button("Rook", WIDTH // 2 - 50, HEIGHT // 2 - 40, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_bishop = draw_button("Bishop", WIDTH // 2 - 50, HEIGHT // 2 + 20, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_knight = draw_button("Knight", WIDTH // 2 - 50, HEIGHT // 2 + 80, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
         
-        
         pygame.display.flip()
 
-        # AI thực hiện nước đi khi đến lượt
-        if game.board.turn == chess.BLACK and not promotion_dialog:
+        # AI thực hiện nước đi khi đến lượt của nó (không phải lượt của người chơi)
+        if game.board.turn != player_color and not promotion_dialog:
             engine.set_position(game.board.fen())
             uci_move = engine.get_best_move()
             if uci_move:
@@ -674,7 +362,8 @@ def play_vs_ai():
                     print(f"Nước đi không hợp lệ từ engine: {uci_move}")
             else:
                 if game.board.is_checkmate():
-                    notification(game, "Chiếu hết! Bạn thua.")
+                    winner = "AI" if game.board.turn != player_color else "Bạn"
+                    notification(game, f"Chiếu hết! {winner} thắng.")
                 elif game.board.is_stalemate():
                     notification(game, "Hòa cờ!")
                 elif game.board.is_insufficient_material():
@@ -716,17 +405,21 @@ def play_1vs1():
     promotion_to = None
     
     while running:
-        draw_board()
-        draw_pieces(game)
+        # Xác định trạng thái lật bàn cờ dựa trên lượt chơi
+        flipped = game.board.turn == chess.BLACK
+        
+        # Vẽ bàn cờ và quân cờ với trạng thái lật
+        draw_board(flipped=flipped)
+        draw_pieces(game, flipped=flipped)
         mouse_pos = pygame.mouse.get_pos()
         
         # Vẽ các nút
-        btn_undo = draw_button("Undo", 10, 660, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-        btn_help = draw_button("Help", 120, 660, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)  # Nút Help mới
-        btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+        btn_undo = draw_button("Undo", 10, 675, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        btn_help = draw_button("Help", 120, 675, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)
+        btn_back = draw_button("Back", WIDTH - 110, 675, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         
         # Vẽ gợi ý nước đi cho ô được chọn
-        draw_move_hints(game, game.selected_square)
+        draw_move_hints(game, game.selected_square, flipped=flipped)
         
         # Tô sáng nước đi gợi ý nếu có
         if suggested_move:
@@ -734,17 +427,21 @@ def play_1vs1():
             from_square = suggested_move.from_square
             from_col = chess.square_file(from_square)
             from_row = 7 - chess.square_rank(from_square)
-            from_center = (from_col * SQUARE_SIZE + SQUARE_SIZE // 2, from_row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            display_from_col = 7 - from_col if flipped else from_col
+            display_from_row = 7 - from_row if flipped else from_row
+            from_center = (display_from_col * SQUARE_SIZE + SQUARE_SIZE // 2, 
+                           display_from_row * SQUARE_SIZE + SQUARE_SIZE // 2)
             pygame.draw.circle(screen, (0, 0, 255), from_center, 20, 3)  # Vòng tròn xanh lam cho ô nguồn
             
             # Tô sáng ô đích (to_square)
             to_square = suggested_move.to_square
             to_col = chess.square_file(to_square)
             to_row = 7 - chess.square_rank(to_square)
-            to_center = (to_col * SQUARE_SIZE + SQUARE_SIZE // 2, to_row * SQUARE_SIZE + SQUARE_SIZE // 2)
+            display_to_col = 7 - to_col if flipped else to_col
+            display_to_row = 7 - to_row if flipped else to_row
+            to_center = (display_to_col * SQUARE_SIZE + SQUARE_SIZE // 2, 
+                         display_to_row * SQUARE_SIZE + SQUARE_SIZE // 2)
             pygame.draw.circle(screen, (255, 255, 0), to_center, 20, 3)  # Vòng tròn vàng cho ô đích
-        
-      
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -753,7 +450,6 @@ def play_1vs1():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if promotion_dialog:
                     # Xử lý chọn quân phong cấp
-                    
                     if btn_queen.collidepoint(event.pos):
                         game.move(promotion_from, promotion_to, promotion=chess.QUEEN)
                         promotion_dialog = False
@@ -774,7 +470,7 @@ def play_1vs1():
                         promotion_dialog = False
                         suggested_move = None
                         handle_move_outcome(game)
-                    screen.blit(menu_background, (0, 0))
+                    
                 else:
                     if btn_undo.collidepoint(event.pos):
                         game.undo()
@@ -799,14 +495,10 @@ def play_1vs1():
                     elif btn_back.collidepoint(event.pos):
                         running = False
                     else:
-                        x, y = event.pos
-                        col = x // SQUARE_SIZE
-                        row = 7 - (y // SQUARE_SIZE)
-                        if not (0 <= col < 8 and 0 <= row < 8):
+                        square = get_square_from_mouse(event.pos, flipped=flipped)
+                        if square is None:
                             continue
-                        square = chess.square(col, row)
                         piece = game.get_piece(square)
-                        
                         
                         if game.selected_square is not None:
                             piece = game.get_piece(game.selected_square)
@@ -839,8 +531,6 @@ def play_1vs1():
             btn_rook = draw_button("Rook", WIDTH // 2 - 50, HEIGHT // 2 - 40, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_bishop = draw_button("Bishop", WIDTH // 2 - 50, HEIGHT // 2 + 20, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_knight = draw_button("Knight", WIDTH // 2 - 50, HEIGHT // 2 + 80, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-        
-        
         
         pygame.display.flip()
 
