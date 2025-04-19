@@ -339,46 +339,43 @@ def play_vs_ai():
         
         pygame.display.flip()
 
+        
         # AI thực hiện nước đi khi đến lượt của nó (không phải lượt của người chơi)
         if game.board.turn != player_color and not promotion_dialog:
+            print("Đến lượt AI. Turn:", "Black" if game.board.turn == chess.BLACK else "White")
+            print("FEN gửi cho engine:", game.board.fen())
             engine.set_position(game.board.fen())
             uci_move = engine.get_best_move()
+            print("Nước đi từ engine:", uci_move)
             if uci_move:
-                from_square = chess.square(
-                    ord(uci_move[0]) - ord('a'),
-                    int(uci_move[1]) - 1
-                )
-                to_square = chess.square(
-                    ord(uci_move[2]) - ord('a'),
-                    int(uci_move[3]) - 1
-                )
-                move = chess.Move(from_square, to_square)
-                # Xử lý phong cấp
-                if len(uci_move) == 5:  # UCI move có phong cấp (e7e8q)
+                from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
+                to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
+                promotion = None
+                if len(uci_move) == 5:
                     promotion_piece = uci_move[4].upper()
-                    if promotion_piece == 'Q':
-                        move = chess.Move(from_square, to_square, promotion=chess.QUEEN)
-                    elif promotion_piece == 'R':
-                        move = chess.Move(from_square, to_square, promotion=chess.ROOK)
-                    elif promotion_piece == 'B':
-                        move = chess.Move(from_square, to_square, promotion=chess.BISHOP)
-                    elif promotion_piece == 'N':
-                        move = chess.Move(from_square, to_square, promotion=chess.KNIGHT)
-                if move in game.board.legal_moves:
+                    promotion = {
+                        'Q': chess.QUEEN,
+                        'R': chess.ROOK,
+                        'B': chess.BISHOP,
+                        'N': chess.KNIGHT
+                    }.get(promotion_piece)
+                move_result = game.move(from_square, to_square, promotion=promotion)
+                if move_result["valid"]:
                     target_piece = game.get_piece(to_square)
                     handle_move_outcome(game, target_piece)
                 else:
                     print(f"Nước đi không hợp lệ từ engine: {uci_move}")
             else:
+                print("Engine không trả về nước đi hợp lệ.")
                 if game.board.is_checkmate():
                     winner = "AI" if game.board.turn != player_color else "Bạn"
                     notification(game, f"Chiếu hết! {winner} thắng.")
                 elif game.board.is_stalemate():
-                    notification(game, "Stalemate!")
+                    notification(game, "Hòa cờ!")
                 elif game.board.is_insufficient_material():
-                    notification(game, "Draw: Insufficient material.")
+                    notification(game, "Hòa: Không đủ quân!")
                 else:
-                    notification(game, "No legal move. Game Over.")
+                    notification(game, "Không có nước đi hợp lệ. Kết thúc ván.")
                 game.board.reset()
 
         pygame.display.flip()
