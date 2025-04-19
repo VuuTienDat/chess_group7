@@ -22,3 +22,4 @@ class Evaluation:
                 else:
                     score -= value
         return score
+    

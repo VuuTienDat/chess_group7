@@ -4,7 +4,11 @@ from chess_game import ChessGame
 import sys
 import os
 from Engine.engine import Engine
-
+from Engine.search import Search
+import json
+from Engine.memory import load_memory, save_memory
+import chess
+    
 if getattr(sys, 'frozen', False):
     bundle_dir = sys._MEIPASS
 else:
@@ -343,19 +347,27 @@ def play_vs_ai():
             engine.set_position(game.board.fen())
             uci_move = engine.get_best_move()
             if uci_move:
-                from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
-                to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
-                promotion = None
-                if len(uci_move) == 5:
+                from_square = chess.square(
+                    ord(uci_move[0]) - ord('a'),
+                    int(uci_move[1]) - 1
+                )
+                to_square = chess.square(
+                    ord(uci_move[2]) - ord('a'),
+                    int(uci_move[3]) - 1
+                )
+                move = chess.Move(from_square, to_square)
+                # Xử lý phong cấp
+                if len(uci_move) == 5:  # UCI move có phong cấp (e7e8q)
                     promotion_piece = uci_move[4].upper()
-                    promotion = {
-                        'Q': chess.QUEEN,
-                        'R': chess.ROOK,
-                        'B': chess.BISHOP,
-                        'N': chess.KNIGHT
-                    }.get(promotion_piece)
-                move_result = game.move(from_square, to_square, promotion=promotion)
-                if move_result["valid"]:
+                    if promotion_piece == 'Q':
+                        move = chess.Move(from_square, to_square, promotion=chess.QUEEN)
+                    elif promotion_piece == 'R':
+                        move = chess.Move(from_square, to_square, promotion=chess.ROOK)
+                    elif promotion_piece == 'B':
+                        move = chess.Move(from_square, to_square, promotion=chess.BISHOP)
+                    elif promotion_piece == 'N':
+                        move = chess.Move(from_square, to_square, promotion=chess.KNIGHT)
+                if move in game.board.legal_moves:
                     target_piece = game.get_piece(to_square)
                     handle_move_outcome(game, target_piece)
                 else:
@@ -365,11 +377,11 @@ def play_vs_ai():
                     winner = "AI" if game.board.turn != player_color else "Bạn"
                     notification(game, f"Chiếu hết! {winner} thắng.")
                 elif game.board.is_stalemate():
-                    notification(game, "Hòa cờ!")
+                    notification(game, "Stalemate!")
                 elif game.board.is_insufficient_material():
-                    notification(game, "Hòa: Không đủ quân!")
+                    notification(game, "Draw: Insufficient material.")
                 else:
-                    notification(game, "Không có nước đi hợp lệ. Kết thúc ván.")
+                    notification(game, "No legal move. Game Over.")
                 game.board.reset()
 
         pygame.display.flip()
