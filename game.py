@@ -4,9 +4,6 @@ from chess_game import ChessGame
 import sys
 import os
 from Engine.engine import Engine
-from Engine.search import Search
-import json
-from Engine.memory import load_memory, save_memory
 import chess
     
 if getattr(sys, 'frozen', False):
