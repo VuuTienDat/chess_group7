@@ -4,46 +4,52 @@ from stockfish import Stockfish
 
 class Engine:
     def __init__(self):
-        # Xác định đường dẫn tới thư mục chứa file stockfish.exe
+        # Get stockfish path
         if getattr(sys, 'frozen', False):
-            # Khi chạy file .exe được build bằng PyInstaller
+            # Running as compiled exe
             bundle_dir = sys._MEIPASS
             stockfish_path = os.path.join(bundle_dir, "Engine", "stockfish", "stockfish.exe")
         else:
-            # Khi chạy bằng Python bình thường
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            stockfish_path = os.path.join(current_dir, "stockfish", "stockfish.exe")
+            # Running with Python interpreter
+            current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            stockfish_path = os.path.join(current_dir, "Engine", "stockfish", "stockfish.exe")
 
-        # Kiểm tra và in debug nếu cần
+        # Check if stockfish exists
         if not os.path.exists(stockfish_path):
-            print(f"[❌] Không tìm thấy stockfish tại: {stockfish_path}")
-        else:
-            print(f"[✅] Đã tìm thấy stockfish tại: {stockfish_path}")
+            print(f"[ERROR] Stockfish not found at: {stockfish_path}")
+            print(f"[INFO] Current directory: {os.getcwd()}")
+            raise FileNotFoundError(f"Stockfish not found at: {stockfish_path}")
+            
+        print(f"[INFO] Found Stockfish at: {stockfish_path}")
 
-        # Khởi tạo Stockfish
+        # Initialize Stockfish
         try:
             self.stockfish = Stockfish(path=stockfish_path)
-            self.stockfish.set_skill_level(20)  # Mức kỹ năng cao nhất
-            self.stockfish.set_depth(15)        # Độ sâu tìm kiếm hợp lý
+            self.stockfish.set_skill_level(20)  # Max skill level
+            self.stockfish.set_depth(15)        # Reasonable search depth
         except Exception as e:
-            print(f"[Lỗi] Khi khởi tạo Stockfish: {e}")
-            raise
+            print(f"[ERROR] Failed to initialize Stockfish: {e}")
+            raise RuntimeError(f"Failed to initialize Stockfish: {e}")
 
     def set_position(self, fen):
-        """Thiết lập vị trí bàn cờ bằng chuỗi FEN."""
+        """Set board position using FEN string."""
+        if not hasattr(self, 'stockfish'):
+            raise RuntimeError("Stockfish engine not initialized")
         try:
             self.stockfish.set_fen_position(fen)
         except Exception as e:
-            print(f"[Lỗi] Khi thiết lập FEN: {e}")
+            print(f"[ERROR] Failed to set position: {e}")
+            raise
 
     def get_best_move(self):
-        """Lấy nước đi tốt nhất từ Stockfish ở định dạng UCI."""
+        """Get best move from Stockfish in UCI format."""
+        if not hasattr(self, 'stockfish'):
+            raise RuntimeError("Stockfish engine not initialized")
         try:
             return self.stockfish.get_best_move()
         except Exception as e:
-
-            print(f"Lỗi khi lấy nước đi: {e}")
-            return None
+            print(f"[ERROR] Failed to get best move: {e}")
+            raise
         
      # 7
     def evaluate_king_safety(board, game_phase):
