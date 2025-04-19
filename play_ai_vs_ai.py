@@ -7,102 +7,62 @@ from utils import (
     draw_board, draw_pieces, draw_button
 )
 from notification import handle_move_outcome
+import time
 
 def play_ai_vs_ai():
-    """Main AI vs AI game loop."""
-    game = ChessGame()
-    try:
-        engine_white = Engine()  # Engine for white pieces
-        engine_black = Engine()  # Engine for black pieces
-        print("[INFO] Both AI engines initialized successfully")
-    except Exception as e:
-        print(f"[ERROR] Failed to initialize AI engines: {e}")
-        return
-
-    running = True
-    move_delay = 1000  # Delay between moves in milliseconds
-    last_move_time = pygame.time.get_ticks()
+    """Play a game between two AI players."""
+    board = chess.Board()
+    engine1 = Engine(max_depth=4, max_time=10.0)
+    engine2 = Engine(max_depth=4, max_time=10.0)
     
-    while running:
-        # Draw board and pieces
-        draw_board(screen, menu_background)
-        draw_pieces(screen, game, images)
+    print("Starting AI vs AI game...")
+    print("AI 1 (White) vs AI 2 (Black)")
+    print("\nInitial position:")
+    print(board)
+    
+    while not board.is_game_over():
+        # Get the current engine based on turn
+        current_engine = engine1 if board.turn == chess.WHITE else engine2
+        current_engine.set_position(board.fen())
         
-        mouse_pos = pygame.mouse.get_pos()
-        btn_back = draw_button(screen, game_font, "Back", WIDTH - 110, 675, 100, 40, 
-                             (200, 50, 50), (255, 100, 100), mouse_pos)
+        # Get the best move
+        move = current_engine.get_best_move()
+        if not move:
+            print("No legal moves available!")
+            break
+            
+        # Convert move to UCI string
+        uci_move = move.uci()
         
-        current_time = pygame.time.get_ticks()
+        # Get source and target squares
+        from_square = chess.parse_square(uci_move[:2])
+        to_square = chess.parse_square(uci_move[2:4])
         
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                import sys
-                sys.exit()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if btn_back.collidepoint(event.pos):
-                    running = False
-                    
-        # Make AI moves with delay
-        if current_time - last_move_time >= move_delay:
-            if game.board.is_game_over():
-                if game.board.is_checkmate():
-                    winner = "White" if game.board.turn == chess.BLACK else "Black"
-                    handle_move_outcome(game, None)
-                elif game.board.is_stalemate():
-                    handle_move_outcome(game, None)
-                elif game.board.is_insufficient_material():
-                    handle_move_outcome(game, None)
-                else:
-                    handle_move_outcome(game, None)
-                game.board.reset()
-            else:
-                # Get current engine based on turn
-                current_engine = engine_white if game.board.turn == chess.WHITE else engine_black
-                
-                # Get AI move
-                try:
-                    current_engine.set_position(game.board.fen())
-                    uci_move = current_engine.get_best_move()
-                    
-                    if not uci_move:
-                        print("[WARNING] AI couldn't find a move")
-                        continue
-                except Exception as e:
-                    print(f"[ERROR] Failed to get AI move: {e}")
-                    continue
-
-                if uci_move:
-                    from_square = chess.square(
-                        ord(uci_move[0]) - ord('a'),
-                        int(uci_move[1]) - 1
-                    )
-                    to_square = chess.square(
-                        ord(uci_move[2]) - ord('a'),
-                        int(uci_move[3]) - 1
-                    )
-                    
-                    # Initialize promotion as None by default
-                    promotion = None
-                    
-                    # Handle promotion
-                    if len(uci_move) == 5:
-                        promotion_piece = uci_move[4].upper()
-                        promotion = {
-                            'Q': chess.QUEEN,
-                            'R': chess.ROOK,
-                            'B': chess.BISHOP,
-                            'N': chess.KNIGHT
-                        }.get(promotion_piece)
-                    
-                    # Create move object for validation
-                    move = chess.Move(from_square, to_square, promotion=promotion)
-                    
-                    if move in game.board.legal_moves:
-                        result = game.move(from_square, to_square, promotion)
-                        if result["valid"]:
-                            target_piece = game.get_piece(to_square)
-                            handle_move_outcome(game, target_piece)
-                            last_move_time = current_time
+        # Get source and target coordinates
+        from_col = chess.square_file(from_square)
+        from_row = chess.square_rank(from_square)
+        to_col = chess.square_file(to_square)
+        to_row = chess.square_rank(to_square)
         
-        pygame.display.flip()
+        # Make the move
+        board.push(move)
+        
+        # Print move information
+        print(f"\n{'White' if board.turn == chess.BLACK else 'Black'} plays: {uci_move}")
+        print(f"From: ({from_col}, {from_row})")
+        print(f"To: ({to_col}, {to_row})")
+        print("\nCurrent position:")
+        print(board)
+        
+        # Add a small delay between moves
+        time.sleep(1)
+    
+    # Print game result
+    result = board.outcome()
+    if result:
+        if result.winner is None:
+            print("\nGame ended in a draw!")
+        else:
+            print(f"\n{'White' if result.winner else 'Black'} wins by {result.termination.name}!")
+    else:
+        print("\nGame ended without a result.")
