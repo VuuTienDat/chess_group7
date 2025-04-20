@@ -241,17 +241,25 @@ def play_vs_ai():
                     target=ai_move_thread, 
                     args=(game.board.fen(), engine)
                 )
-                ai_thread.daemon = True  # Đảm bảo luồng kết thúc khi chương trình chính kết thúc
+                ai_thread.daemon = True
                 ai_thread.start()
             else:
                 # Kiểm tra xem AI đã tính toán xong chưa
                 try:
                     # Non-blocking check
-                    move = ai_move_queue.get_nowait()
-                    if move and move in game.board.legal_moves:
-                        game.board.push(move)
-                        target_piece = game.get_piece(move.to_square)
-                        handle_move_outcome(game, target_piece)
+                    uci_move = ai_move_queue.get_nowait()
+                    if uci_move:
+                        try:
+                            # Chuyển chuỗi UCI thành chess.Move
+                            move = chess.Move.from_uci(uci_move)
+                            if move in game.board.legal_moves:
+                                game.board.push(move)
+                                target_piece = game.get_piece(move.to_square)
+                                handle_move_outcome(game, target_piece)
+                            else:
+                                print(f"[WARNING] AI move {uci_move} is not legal")
+                        except ValueError as e:
+                            print(f"[ERROR] Invalid UCI move format: {uci_move}, Error: {e}")
                     game.ai_thinking = False
                 except queue.Empty:
                     # AI vẫn đang tính toán

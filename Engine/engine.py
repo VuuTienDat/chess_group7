@@ -287,7 +287,7 @@ class Engine:
             return min_eval
 
     def get_best_move(self):
-        """Get best move using alpha-beta pruning."""
+        """Get best move using alpha-beta pruning, returning UCI string."""
         if not self.board:
             print("[ERROR] Board not initialized")
             return None
@@ -304,14 +304,15 @@ class Engine:
                 print("[INFO] No legal moves available")
                 return None
                 
-            # If only one move is possible, play it immediately
+            # If only one move is possible, return it immediately
             if len(legal_moves) == 1:
                 print("[INFO] Only one legal move available")
-                return legal_moves[0]
+                return legal_moves[0].uci()  # Trả về chuỗi UCI
             
             # Initialize search
             self.nodes_searched = 0
             self.start_time = time.time()
+            self.max_time = time  # Sử dụng tham số time
             self.best_move = None
             self.best_score = float('-inf')
             
@@ -322,7 +323,7 @@ class Engine:
             
             # Perform alpha-beta search
             score = self.alpha_beta(self.board, self.max_depth, float('-inf'), float('inf'),
-                                  is_maximizing)
+                                is_maximizing)
             
             # Print final statistics
             time_used = time.time() - self.start_time
@@ -336,11 +337,12 @@ class Engine:
             print(f"  - Score: {self.best_score}")
             print(f"  - Player: {'White' if is_maximizing else 'Black'}")
             
-            return self.best_move if self.best_move else legal_moves[0]
+            # Return best move as UCI string
+            return self.best_move.uci() if self.best_move else legal_moves[0].uci()
                 
         except Exception as e:
             print(f"[ERROR] Failed to get best move: {e}")
-            return legal_moves[0] if legal_moves else None
+            return legal_moves[0].uci() if legal_moves else None
 
 if __name__ == "__main__":
     # Example usage
@@ -348,6 +350,6 @@ if __name__ == "__main__":
     engine.set_position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
     best_move = engine.get_best_move()
     if best_move:
-        print(f"Best move: {best_move.uci()}")
+        print(f"Best move: {best_move}")
     else:
         print("No move found")
