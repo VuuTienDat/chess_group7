@@ -3,9 +3,12 @@ import chess
 from chess_game import ChessGame
 import sys
 import os
+import threading
+import queue
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from Engine.engine import Engine
-import chess
-    
+
 if getattr(sys, 'frozen', False):
     bundle_dir = sys._MEIPASS
 else:
@@ -49,8 +52,8 @@ HOVER_COLOR = (255, 0, 0)
 menu_background = pygame.image.load(os.path.join(image_path, "landscape4.png"))
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
 
-def draw_text(text, x, y, center=True, color=BLACK):
-    label = FONT.render(text, True, color)
+def draw_text(text, x, y, font=FONT, center=True, color=BLACK):
+    label = font.render(text, True, color)
     rect = label.get_rect()
     if center:
         rect.center = (x, y)
@@ -91,6 +94,7 @@ def draw_board(flipped=False):
     for row in range(8):
         label = font.render(ranks[row], True, (0, 0, 0))  # Màu đen
         screen.blit(label, (5, row * SQUARE_SIZE + SQUARE_SIZE // 2 - 10))
+
 def draw_pieces(game, flipped=False):
     for square in chess.SQUARES:
         piece = game.get_piece(square)
@@ -142,8 +146,6 @@ def draw_button(text, x, y, w, h, color, hover_color, mouse_pos):
     draw_text(text, x + w // 2, y + h // 2, center=True, color=WHITE)
     return rect
 
-
-
 def notification(game, message):
     while True:
         screen.blit(menu_background, (0, 0))
@@ -160,6 +162,7 @@ def notification(game, message):
                     game.move_history.clear()
                     main_menu()
         pygame.display.flip()
+
 def choose_player_color():
     """
     Hiển thị giao diện để người dùng chọn chơi quân trắng hoặc quân đen.
@@ -190,6 +193,7 @@ def choose_player_color():
                     return None
 
         pygame.display.flip()
+
 def play_vs_ai():
     # Hiển thị giao diện chọn màu quân
     player_color = choose_player_color()
@@ -203,7 +207,18 @@ def play_vs_ai():
     promotion_dialog = False
     promotion_from = None
     promotion_to = None
-    
+    ai_thinking = False  # Biến để theo dõi trạng thái AI
+    move_queue = queue.Queue()  # Hàng đợi để lưu nước đi từ AI
+    ai_thread = None  # Luồng AI
+
+    def get_ai_move():
+        """Hàm chạy trong luồng AI để lấy nước đi tốt nhất."""
+        print("AI đang suy nghĩ...")
+        engine.set_position(game.board.fen())
+        uci_move = engine.get_best_move()
+        print("Nước đi từ engine:", uci_move)
+        move_queue.put(uci_move)  # Đưa nước đi vào hàng đợi
+
     while running:
         # Lật bàn cờ nếu người chơi chọn quân đen
         flipped = (player_color == chess.BLACK)
@@ -220,6 +235,10 @@ def play_vs_ai():
         btn_help = draw_button("Help", 120, 675, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)
         btn_back = draw_button("Back", WIDTH - 110, 675, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         
+        # Hiển thị trạng thái "AI đang suy nghĩ"
+        if ai_thinking:
+            draw_text("AI Thinking...", WIDTH // 2, HEIGHT - 30, font=pygame.font.Font(None, 30), color=(255, 255, 0))
+
         # Vẽ gợi ý nước đi cho ô được chọn
         draw_move_hints(game, game.selected_square, flipped=flipped)
         
@@ -247,8 +266,7 @@ def play_vs_ai():
        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+                running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if promotion_dialog:
                     print("Phong nào")
@@ -278,6 +296,11 @@ def play_vs_ai():
                         elif len(game.board.move_stack) == 1:
                             game.undo()  # Hoàn tác nước đi duy nhất (của người chơi hoặc AI)
                         suggested_move = None
+                        # Hủy luồng AI nếu đang chạy
+                        ai_thinking = False
+                        if ai_thread and ai_thread.is_alive():
+                            # Không có cách trực tiếp để hủy thread, nên ta bỏ qua và tạo thread mới khi cần
+                            move_queue = queue.Queue()  # Reset hàng đợi
                     elif btn_help.collidepoint(event.pos):
                         if game.board.turn == player_color:  # Chỉ gợi ý cho lượt của người chơi
                             engine.set_position(game.board.fen())
@@ -297,6 +320,8 @@ def play_vs_ai():
                                 suggested_move = chess.Move(from_square, to_square, promotion=promotion)
                     elif btn_back.collidepoint(event.pos):
                         running = False
+                        ai_thinking = False
+                        move_queue = queue.Queue()  # Reset hàng đợi
                     else:
                         # Chỉ cho phép người chơi di chuyển khi đến lượt của họ
                         if game.board.turn == player_color:
@@ -331,22 +356,25 @@ def play_vs_ai():
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 150))
             screen.blit(overlay, (0, 0))
-            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, color=WHITE)
+            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, FONT, True, (255, 255, 255))
             btn_queen = draw_button("Queen", WIDTH // 2 - 50, HEIGHT // 2 - 100, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_rook = draw_button("Rook", WIDTH // 2 - 50, HEIGHT // 2 - 40, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_bishop = draw_button("Bishop", WIDTH // 2 - 50, HEIGHT // 2 + 20, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_knight = draw_button("Knight", WIDTH // 2 - 50, HEIGHT // 2 + 80, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
         
-        pygame.display.flip()
-
-        
         # AI thực hiện nước đi khi đến lượt của nó (không phải lượt của người chơi)
-        if game.board.turn != player_color and not promotion_dialog:
+        if game.board.turn != player_color and not promotion_dialog and not ai_thinking:
             print("Đến lượt AI. Turn:", "Black" if game.board.turn == chess.BLACK else "White")
             print("FEN gửi cho engine:", game.board.fen())
-            engine.set_position(game.board.fen())
-            uci_move = engine.get_best_move()
-            print("Nước đi từ engine:", uci_move)
+            ai_thinking = True
+            # Tạo luồng mới để tính nước đi của AI
+            ai_thread = threading.Thread(target=get_ai_move)
+            ai_thread.start()
+
+        # Kiểm tra xem AI đã tính xong nước đi chưa
+        if ai_thinking and not move_queue.empty():
+            uci_move = move_queue.get()
+            ai_thinking = False
             if uci_move:
                 from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
                 to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
@@ -379,6 +407,10 @@ def play_vs_ai():
                 game.board.reset()
 
         pygame.display.flip()
+
+    # Đảm bảo luồng AI kết thúc trước khi thoát
+    if ai_thread and ai_thread.is_alive():
+        ai_thread.join()
 
 def handle_move_outcome(game, target_piece=None):
     if game.board.is_checkmate():
@@ -528,11 +560,11 @@ def play_1vs1():
                             print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
         
         if promotion_dialog:
-            #Vẽ giao diện chọn phong cấp
+            # Vẽ giao diện chọn phong cấp
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 150))
             screen.blit(overlay, (0, 0))
-            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, FONT, (255, 255, 255))
+            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, FONT, True, (255, 255, 255))
             btn_queen = draw_button("Queen", WIDTH // 2 - 50, HEIGHT // 2 - 100, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_rook = draw_button("Rook", WIDTH // 2 - 50, HEIGHT // 2 - 40, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
             btn_bishop = draw_button("Bishop", WIDTH // 2 - 50, HEIGHT // 2 + 20, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)

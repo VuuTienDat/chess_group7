@@ -1,48 +1,49 @@
-import os
-import sys
-from stockfish import Stockfish
+import chess
+from Engine.search import Search # type: ignore
 
 class Engine:
-    def __init__(self):
-        # Xác định đường dẫn tới thư mục chứa file stockfish.exe
-        if getattr(sys, 'frozen', False):
-            # Khi chạy file .exe được build bằng PyInstaller
-            bundle_dir = sys._MEIPASS
-            stockfish_path = os.path.join(bundle_dir, "Engine", "stockfish", "stockfish.exe")
-        else:
-            # Khi chạy bằng Python bình thường
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            stockfish_path = os.path.join(current_dir, "stockfish", "stockfish.exe")
-
-        # Kiểm tra và in debug nếu cần
-        if not os.path.exists(stockfish_path):
-            print(f"[❌] Không tìm thấy stockfish tại: {stockfish_path}")
-        else:
-            print(f"[✅] Đã tìm thấy stockfish tại: {stockfish_path}")
-
-        # Khởi tạo Stockfish
+    def __init__(self, depth=4):
+        """Khởi tạo engine cờ vua với độ sâu tìm kiếm."""
         try:
-            self.stockfish = Stockfish(path=stockfish_path)
-            self.stockfish.set_skill_level(20)  # Mức kỹ năng cao nhất
-            self.stockfish.set_depth(15)        # Độ sâu tìm kiếm hợp lý
+            self.board = chess.Board()
+            self.search = Search(depth=depth)
+            print("[✅] Đã khởi tạo ChessEngine với độ sâu tìm kiếm:", depth)
         except Exception as e:
-            print(f"[Lỗi] Khi khởi tạo Stockfish: {e}")
+            print(f"[❌] Lỗi khi khởi tạo ChessEngine: {e}")
             raise
 
     def set_position(self, fen):
         """Thiết lập vị trí bàn cờ bằng chuỗi FEN."""
         try:
-            self.stockfish.set_fen_position(fen)
+            self.board.set_fen(fen)
+            print("[✅] Đã thiết lập vị trí FEN:", fen)
         except Exception as e:
-            print(f"[Lỗi] Khi thiết lập FEN: {e}")
+            print(f"[❌] Lỗi khi thiết lập FEN: {e}")
+            raise
 
     def get_best_move(self):
-        """Lấy nước đi tốt nhất từ Stockfish ở định dạng UCI."""
+        """Lấy nước đi tốt nhất ở định dạng UCI."""
         try:
-            return self.stockfish.get_best_move()
+            move = self.search.get_best_move(self.board)
+            if move is None:
+                print("[⚠] Không tìm thấy nước đi hợp lệ")
+                return None
+            uci_move = move.uci()
+            print("[✅] Nước đi tốt nhất:", uci_move)
+            return uci_move
         except Exception as e:
-
-            print(f"Lỗi khi lấy nước đi: {e}")
+            print(f"[❌] Lỗi khi lấy nước đi: {e}")
             return None
-        
-     
+
+if __name__ == "__main__":
+    # Kiểm tra engine
+    engine = Engine(depth=3)
+    # Vị trí khai cuộc
+    engine.set_position("r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R w KQkq - 0 1")
+    print("Nước đi tốt nhất:", engine.get_best_move())
+    # Vị trí trung cuộc
+    engine.set_position("rnbqkb1r/pppp1ppp/5n2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1")
+    print("Nước đi tốt nhất:", engine.get_best_move())
+    # Vị trí tàn cuộc
+    engine.set_position("8/5k2/8/8/8/8/2K5/8 w - - 0 1")
+    print("Nước đi tốt nhất:", engine.get_best_move())

@@ -1,5 +1,5 @@
 import chess
-from evaluation import Evaluation
+from Engine.evaluation import Evaluation # type: ignore
 
 class Search:
     def __init__(self, depth):
