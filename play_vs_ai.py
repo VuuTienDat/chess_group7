@@ -1,5 +1,7 @@
 import pygame
 import chess
+import threading
+import queue
 from chess_game import ChessGame
 from Engine.engine import Engine
 from utils import (
@@ -8,6 +10,23 @@ from utils import (
     draw_move_hints, get_square_from_mouse
 )
 from notification import handle_move_outcome
+
+# Tạo queue để truyền dữ liệu giữa các luồng
+ai_move_queue = queue.Queue()
+
+def ai_move_thread(board_fen, engine):
+    """Hàm xử lý nước đi của AI trong một luồng riêng biệt"""
+    try:
+        engine.set_position(board_fen)
+        move = engine.get_best_move()
+        if move:
+            ai_move_queue.put(move)
+        else:
+            print("[WARNING] AI couldn't find a move")
+            ai_move_queue.put(None)
+    except Exception as e:
+        print(f"[ERROR] Failed to get AI move: {e}")
+        ai_move_queue.put(None)
 
 def choose_player_color():
     """
@@ -65,11 +84,12 @@ def play_vs_ai():
     promotion_from = None
     promotion_to = None
     
+    # Biến để theo dõi trạng thái AI
+    game.ai_thinking = False
+    
     while running:
         # Flip board if player chose black
         flipped = (player_color == chess.BLACK)
-
-        # Draw board and pieces
         draw_board(screen, menu_background, flipped=flipped)
         draw_pieces(screen, game, images, flipped=flipped)
         mouse_pos = pygame.mouse.get_pos()
@@ -84,6 +104,11 @@ def play_vs_ai():
         
         # Draw move hints
         draw_move_hints(screen, game, game.selected_square, flipped=flipped)
+        
+        # Hiển thị chỉ báo AI đang suy nghĩ
+        if game.ai_thinking:
+            thinking_text = "AI is thinking" + "." * (int(pygame.time.get_ticks() / 500) % 4)
+            draw_text(screen, game_font, thinking_text, WIDTH // 2, 20, color=(255, 0, 0))
         
         # Highlight suggested move if any
         if suggested_move:
@@ -206,21 +231,28 @@ def play_vs_ai():
                                    100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
         
         pygame.display.flip()
-
-        # AI move
+        
+        # Xử lý nước đi của AI trong đa luồng
         if game.board.turn != player_color and not promotion_dialog:
-            try:
-                engine.set_position(game.board.fen())
-                move = engine.get_best_move()
-                if not move:
-                    print("[WARNING] AI couldn't find a move")
-                    continue
-                
-                if move in game.board.legal_moves:
-                    game.board.push(move)
-                    target_piece = game.get_piece(move.to_square)
-                    handle_move_outcome(game, target_piece)
-
-            except Exception as e:
-                print(f"[ERROR] Failed to get AI move: {e}")
-                continue
+            if not game.ai_thinking:
+                # Khởi động luồng AI nếu chưa đang suy nghĩ
+                game.ai_thinking = True
+                ai_thread = threading.Thread(
+                    target=ai_move_thread, 
+                    args=(game.board.fen(), engine)
+                )
+                ai_thread.daemon = True  # Đảm bảo luồng kết thúc khi chương trình chính kết thúc
+                ai_thread.start()
+            else:
+                # Kiểm tra xem AI đã tính toán xong chưa
+                try:
+                    # Non-blocking check
+                    move = ai_move_queue.get_nowait()
+                    if move and move in game.board.legal_moves:
+                        game.board.push(move)
+                        target_piece = game.get_piece(move.to_square)
+                        handle_move_outcome(game, target_piece)
+                    game.ai_thinking = False
+                except queue.Empty:
+                    # AI vẫn đang tính toán
+                    pass
