@@ -1,48 +1,44 @@
-import os
-import sys
-from stockfish import Stockfish
+import chess
+from Engine.evaluation import Evaluation
+from Engine.search import Search  # Giả định Search đã dùng Evaluation bên trong
 
 class Engine:
-    def __init__(self):
-        # Xác định đường dẫn tới thư mục chứa file stockfish.exe
-        if getattr(sys, 'frozen', False):
-            # Khi chạy file .exe được build bằng PyInstaller
-            bundle_dir = sys._MEIPASS
-            stockfish_path = os.path.join(bundle_dir, "Engine", "stockfish", "stockfish.exe")
+    def __init__(self, depth=3):
+        self.evaluator = Evaluation()
+        self.depth = depth
+        self.board = chess.Board()
+        self.search = Search(self.evaluator, depth)
+
+    def set_position(self, fen: str):
+        """Thiết lập bàn cờ từ chuỗi FEN"""
+        self.board = chess.Board(fen)
+
+    def get_best_move(self) -> str:
+        """Tìm nước đi tốt nhất dưới dạng UCI"""
+        best_move = self.search.get_best_move(self.board)
+        return best_move.uci() if best_move else None
+
+    def evaluate_position(self) -> int:
+        """Đánh giá vị trí hiện tại trên bàn cờ"""
+        return self.evaluator.evaluate(self.board)
+
+    def make_move(self, move_uci: str):
+        """Thực hiện một nước đi từ chuỗi UCI"""
+        move = chess.Move.from_uci(move_uci)
+        if move in self.board.legal_moves:
+            self.board.push(move)
         else:
-            # Khi chạy bằng Python bình thường
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            stockfish_path = os.path.join(current_dir, "stockfish", "stockfish.exe")
+            raise ValueError(f"Nước đi không hợp lệ: {move_uci}")
 
-        # Kiểm tra và in debug nếu cần
-        if not os.path.exists(stockfish_path):
-            print(f"[❌] Không tìm thấy stockfish tại: {stockfish_path}")
-        else:
-            print(f"[✅] Đã tìm thấy stockfish tại: {stockfish_path}")
+    def undo_move(self):
+        """Hoàn tác nước đi vừa rồi"""
+        if self.board.move_stack:
+            self.board.pop()
 
-        # Khởi tạo Stockfish
-        try:
-            self.stockfish = Stockfish(path=stockfish_path)
-            self.stockfish.set_skill_level(20)  # Mức kỹ năng cao nhất
-            self.stockfish.set_depth(15)        # Độ sâu tìm kiếm hợp lý
-        except Exception as e:
-            print(f"[Lỗi] Khi khởi tạo Stockfish: {e}")
-            raise
+    def get_fen(self) -> str:
+        """Trả về chuỗi FEN hiện tại"""
+        return self.board.fen()
 
-    def set_position(self, fen):
-        """Thiết lập vị trí bàn cờ bằng chuỗi FEN."""
-        try:
-            self.stockfish.set_fen_position(fen)
-        except Exception as e:
-            print(f"[Lỗi] Khi thiết lập FEN: {e}")
-
-    def get_best_move(self):
-        """Lấy nước đi tốt nhất từ Stockfish ở định dạng UCI."""
-        try:
-            return self.stockfish.get_best_move()
-        except Exception as e:
-
-            print(f"Lỗi khi lấy nước đi: {e}")
-            return None
-        
-     
+    def is_game_over(self) -> bool:
+        """Kiểm tra xem ván cờ đã kết thúc chưa"""
+        return self.board.is_game_over()

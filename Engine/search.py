@@ -1,20 +1,19 @@
 import chess
-from evaluation import Evaluation
 
 class Search:
-    def __init__(self, depth):
+    def __init__(self, evaluator, depth):
+        self.evaluator = evaluator  # Được truyền từ ngoài vào
         self.depth = depth
-        self.evaluation = Evaluation()
 
     def alpha_beta(self, board, depth, alpha, beta, maximizing_player):
         if depth == 0:
-            return self.evaluation.evaluate(board)
+            return self.evaluator.evaluate(board)
 
         moves = list(board.legal_moves)
         if not moves:
             if board.is_checkmate():
                 return -float('inf') if maximizing_player else float('inf')
-            return 0  # Hòa cờ
+            return 0  # Hòa
 
         if maximizing_player:
             max_eval = -float('inf')

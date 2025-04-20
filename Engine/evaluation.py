@@ -173,7 +173,11 @@ class Evaluation:
             score += self.PARAMS['tempo_bonus']
         else:
             score -= self.PARAMS['tempo_bonus']
-            
+        #6. Thưởng cấu trúc tốt
+        score += self.evaluate_pawn_structure(board)
+
+        #7. Đánh giá độ linh động quân
+        score += self.evaluate_mobility(board, game_phase)
         return score
 
     def evaluate_material_and_position(self, board, game_phase):
@@ -318,24 +322,25 @@ class Evaluation:
         return penalty if color == chess.WHITE else -penalty
 
     def evaluate_castling(self, board, color, game_phase):
-        """Đánh giá nhập thành"""
-        if game_phase == 'endgame':
+        """Đánh giá nhập thành trong khai cuộc: thưởng nếu đã nhập thành, phạt nếu mất quyền nhập thành."""
+        if game_phase != 'opening':
             return 0
-        
-        castling_bonus = 0
+
+        score = 0
         king_square = board.king(color)
-        
-        castled_positions = {
-            chess.WHITE: [chess.G1, chess.C1],
-            chess.BLACK: [chess.G8, chess.C8]
-        }
-        
-        if king_square in castled_positions[color]:
-            castling_bonus = 35
-        elif board.has_castling_rights(color):
-            castling_bonus = -25
-        
-        return castling_bonus if color == chess.WHITE else -castling_bonus
+        # Kiểm tra xem vua đã nhập thành chưa
+        if color == chess.WHITE:
+            if king_square == chess.G1 or king_square == chess.C1:
+                score += 40  # Thưởng đã nhập thành
+            elif not board.has_kingside_castling_rights(chess.WHITE) and not board.has_queenside_castling_rights(chess.WHITE):
+                score -= 20  # Phạt nếu đã mất quyền nhập thành
+        else:
+            if king_square == chess.G8 or king_square == chess.C8:
+                score -= 40  # Thưởng đã nhập thành (trừ vì đang tính điểm cho đen)
+            elif not board.has_kingside_castling_rights(chess.BLACK) and not board.has_queenside_castling_rights(chess.BLACK):
+                score += 20  # Phạt nếu đã mất quyền nhập thành (cộng vì là bên đen)
+
+        return score    
 
     def king_activity_evaluation(self, board):
         """Đánh giá hoạt động Vua trong tàn cuộc"""
@@ -437,6 +442,103 @@ class Evaluation:
     def are_connected_rooks(self, rooks, board, color):
         """Kiểm tra Xe kết nối"""
         return board.is_attacked_by(color, rooks[1]) or board.is_attacked_by(color, rooks[0])
+
+    def evaluate_pawn_structure(self, board):
+        """Đánh giá cấu trúc tốt của cả hai bên: isolated, doubled, backward pawns và pawn chains"""
+        score = 0
+
+        for color in [chess.WHITE, chess.BLACK]:
+            pawn_squares = board.pieces(chess.PAWN, color)
+            files = [chess.square_file(sq) for sq in pawn_squares]
+
+            isolated_penalty = 10
+            doubled_penalty = 15
+            backward_penalty = 8
+            chain_bonus = 5
+
+            color_score = 0
+
+            # Đếm số lượng quân tốt trên mỗi file
+            file_count = [0] * 8
+            for f in files:
+                file_count[f] += 1
+
+            for square in pawn_squares:
+                file = chess.square_file(square)
+                rank = chess.square_rank(square) if color == chess.WHITE else 7 - chess.square_rank(square)
+
+                # Isolated pawn
+                is_isolated = True
+                if file > 0 and file_count[file - 1] > 0:
+                    is_isolated = False
+                if file < 7 and file_count[file + 1] > 0:
+                    is_isolated = False
+                if is_isolated:
+                    color_score -= isolated_penalty
+
+                # Doubled pawn
+                if file_count[file] > 1:
+                    color_score -= doubled_penalty
+
+                # Backward pawn (đơn giản hóa)
+                is_backward = True
+                for adj_file in [file - 1, file + 1]:
+                    if 0 <= adj_file < 8:
+                        for r in range(rank):
+                            adj_sq = chess.square(adj_file, r if color == chess.WHITE else 7 - r)
+                            if adj_sq in pawn_squares:
+                                is_backward = False
+                                break
+                if is_backward:
+                    color_score -= backward_penalty
+
+                # Pawn chain (kiểm tra quân tốt ở phía sau chéo)
+                for dx in [-1, 1]:
+                    behind_file = file + dx
+                    behind_rank = rank - 1
+                    if 0 <= behind_file < 8 and behind_rank >= 0:
+                        behind_sq = chess.square(behind_file, behind_rank if color == chess.WHITE else 7 - behind_rank)
+                        if behind_sq in pawn_squares:
+                            color_score += chain_bonus
+                            break  # chỉ cộng bonus một lần là đủ
+
+            score += color_score if color == chess.WHITE else -color_score
+
+        return score
+
+
+    def evaluate_mobility(self, board, game_phase):
+        """Đánh giá độ cơ động cho cả hai bên, chủ yếu trong midgame"""
+        if game_phase == 'endgame':
+            return 0
+
+        mobility_score = 0
+        piece_weights = {
+            chess.KNIGHT: 2,
+            chess.BISHOP: 2,
+            chess.ROOK: 1,
+            chess.QUEEN: 1,
+        }
+
+        for color in [chess.WHITE, chess.BLACK]:
+            color_score = 0
+
+            for piece_type, weight in piece_weights.items():
+                for square in board.pieces(piece_type, color):
+                    legal_moves = list(board.generate_legal_moves(from_mask=chess.BB_SQUARES[square]))
+                    move_count = sum(
+                        1 for move in legal_moves
+                        if board.piece_at(move.to_square) is None or board.piece_at(move.to_square).color != color
+                    )
+                    color_score += weight * move_count
+
+            if color == chess.WHITE:
+                mobility_score += color_score
+            else:
+                mobility_score -= color_score
+
+        return mobility_score
+
 
 if __name__ == "__main__":
     evaluator = Evaluation()
