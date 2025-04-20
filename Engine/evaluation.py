@@ -101,7 +101,7 @@ class Evaluation:
         }
 
     def init_evaluation_parameters(self):
-        """Khởi tạo các tham số đánh giá"""
+        """Khởi tạo các tham số đánh giá, bổ sung thêm tham số mới"""
         self.PARAMS = {
             'piece_values': {
                 chess.PAWN: 100,
@@ -114,22 +114,36 @@ class Evaluation:
             'bishop': {
                 'pair_bonus': 50,
                 'bad_penalty': -25,
-                'blocked_penalty': -15
+                'blocked_penalty': -15,
+                'mobility_weight': 0.5  # Thêm trọng số di động
             },
             'knight': {
                 'rim_penalty': -20,
                 'trapped_penalty': -40,
-                'outpost_bonus': 30
+                'outpost_bonus': 30,
+                'mobility_weight': 0.6
             },
             'rook': {
                 'open_file_bonus': 25,
                 'semi_open_bonus': 15,
                 'connected_bonus': 20,
-                'seventh_rank_bonus': 40
+                'seventh_rank_bonus': 40,
+                'mobility_weight': 0.4
             },
             'queen': {
                 'early_penalty': -20,
                 'mobility_weight': 0.4
+            },
+            'pawn_structure': {  # Thêm tham số cho cấu trúc Tốt
+                'isolated_penalty': -20,
+                'doubled_penalty': -15,
+                'passed_bonus': 50,
+                'backward_penalty': -10,
+                'chain_bonus': 10
+            },
+            'center_control': {
+                'pawn_center_bonus': 20,
+                'piece_center_bonus': 10
             },
             'game_phase_threshold': 8,
             'tempo_bonus': 10
@@ -144,36 +158,42 @@ class Evaluation:
         return "endgame" if total_material <= self.PARAMS['game_phase_threshold'] else "opening"
 
     def evaluate(self, board):
-        """Hàm đánh giá tổng hợp chính"""
-        # Kiểm tra trạng thái kết thúc ván cờ
+        """Hàm đánh giá tổng hợp chính, bổ sung các yếu tố mới"""
         if board.is_checkmate():
             return -self.MATE_SCORE if board.turn == chess.WHITE else self.MATE_SCORE
         if board.is_stalemate() or board.is_insufficient_material():
             return 0
 
-        # Xác định giai đoạn ván cờ
         game_phase = self.get_game_phase(board)
         score = 0
 
         # 1. Đánh giá vật chất và vị trí quân
         score += self.evaluate_material_and_position(board, game_phase)
-        
+    
         # 2. Đánh giá đặc điểm riêng từng quân
         score += self.evaluate_piece_specific_features(board, chess.WHITE, game_phase)
         score -= self.evaluate_piece_specific_features(board, chess.BLACK, game_phase)
-        
+    
         # 3. Đánh giá an toàn Vua
         score += self.evaluate_king_safety(board, game_phase)
-        
+    
         # 4. Đánh giá hoạt động Vua trong tàn cuộc
         score += self.king_activity_evaluation(board)
-        
-        # 5. Thưởng nhịp điệu (tempo)
+    
+        # 5. Đánh giá cấu trúc Tốt
+        score += self.evaluate_pawn_structure(board, chess.WHITE)
+        score -= self.evaluate_pawn_structure(board, chess.BLACK)
+    
+        # 6. Đánh giá kiểm soát trung tâm
+        score += self.evaluate_center_control(board, chess.WHITE)
+        score -= self.evaluate_center_control(board, chess.BLACK)
+    
+        # 7. Thưởng nhịp điệu (tempo)
         if board.turn == chess.WHITE:
             score += self.PARAMS['tempo_bonus']
         else:
             score -= self.PARAMS['tempo_bonus']
-            
+        
         return score
 
     def evaluate_material_and_position(self, board, game_phase):
@@ -209,11 +229,11 @@ class Evaluation:
         return score
 
     def evaluate_piece_specific_features(self, board, color, game_phase):
-        """Đánh giá đặc điểm riêng từng quân"""
+        """Đánh giá đặc điểm riêng từng quân, bổ sung tính di động"""
         score = 0
         bishops = []
         rooks = []
-        
+    
         for piece_type in [chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN]:
             for square in board.pieces(piece_type, color):
                 if piece_type == chess.KNIGHT:
@@ -224,14 +244,20 @@ class Evaluation:
                         score += self.PARAMS['knight']['trapped_penalty']
                     if self.is_knight_outpost(board, square, color):
                         score += self.PARAMS['knight']['outpost_bonus']
-                
+                    # Tính di động
+                    mobility = len(list(board.attacks(square)))
+                    score += mobility * self.PARAMS['knight']['mobility_weight']
+            
                 elif piece_type == chess.BISHOP:
                     bishops.append(square)
                     if self.is_bad_bishop(board, square, color):
                         score += self.PARAMS['bishop']['bad_penalty']
                     if self.is_blocked_bishop(board, square):
                         score += self.PARAMS['bishop']['blocked_penalty']
-                
+                    # Tính di động
+                    mobility = len(list(board.attacks(square)))
+                    score += mobility * self.PARAMS['bishop']['mobility_weight']
+            
                 elif piece_type == chess.ROOK:
                     rooks.append(square)
                     file_status = self.get_file_status(board, square, color)
@@ -242,16 +268,19 @@ class Evaluation:
                     rank = chess.square_rank(square)
                     if (color == chess.WHITE and rank == 6) or (color == chess.BLACK and rank == 1):
                         score += self.PARAMS['rook']['seventh_rank_bonus']
-                
+                    # Tính di động
+                    mobility = len(list(board.attacks(square)))
+                    score += mobility * self.PARAMS['rook']['mobility_weight']
+            
                 elif piece_type == chess.QUEEN:
                     if game_phase == 'opening' and chess.square_rank(square) > 1:
                         score += self.PARAMS['queen']['early_penalty']
                     mobility = len(list(board.attacks(square)))
                     score += mobility * self.PARAMS['queen']['mobility_weight']
-        
+    
         if len(rooks) >= 2 and self.are_connected_rooks(rooks, board, color):
             score += self.PARAMS['rook']['connected_bonus']
-            
+        
         return score
 
     def evaluate_king_safety(self, board, game_phase):
@@ -437,6 +466,93 @@ class Evaluation:
     def are_connected_rooks(self, rooks, board, color):
         """Kiểm tra Xe kết nối"""
         return board.is_attacked_by(color, rooks[1]) or board.is_attacked_by(color, rooks[0])
+    
+    def evaluate_pawn_structure(self, board, color):
+        """Đánh giá cấu trúc Tốt"""
+        score = 0
+        pawns = list(board.pieces(chess.PAWN, color))
+        enemy_pawns = list(board.pieces(chess.PAWN, not color))
+    
+        # Kiểm tra từng Tốt
+        for pawn_sq in pawns:
+            file = chess.square_file(pawn_sq)
+            rank = chess.square_rank(pawn_sq)
+        
+            # 1. Tốt yếu (Isolated Pawn)
+            is_isolated = True
+            for adj_file in [file - 1, file + 1]:
+                if 0 <= adj_file < 8:
+                    for adj_pawn in pawns:
+                        if chess.square_file(adj_pawn) == adj_file:
+                            is_isolated = False
+                            break
+                if not is_isolated:
+                    break
+            if is_isolated:
+                score += self.PARAMS['pawn_structure']['isolated_penalty']
+        
+            # 2. Tốt đôi (Doubled Pawn)
+            same_file_pawns = sum(1 for p in pawns if chess.square_file(p) == file)
+            if same_file_pawns > 1:
+                score += self.PARAMS['pawn_structure']['doubled_penalty'] * (same_file_pawns - 1)
+        
+            # 3. Tốt qua sông (Passed Pawn)
+            is_passed = True
+            for enemy_pawn in enemy_pawns:
+                e_file = chess.square_file(enemy_pawn)
+                e_rank = chess.square_rank(enemy_pawn)
+                if abs(e_file - file) <= 1:
+                    if (color == chess.WHITE and e_rank >= rank) or (color == chess.BLACK and e_rank <= rank):
+                        is_passed = False
+                        break
+            if is_passed:
+                score += self.PARAMS['pawn_structure']['passed_bonus']
+        
+            # 4. Tốt lạc hậu (Backward Pawn)
+            is_backward = True
+            for adj_file in [file - 1, file + 1]:
+                if 0 <= adj_file < 8:
+                    for adj_pawn in pawns:
+                        if chess.square_file(adj_pawn) == adj_file:
+                            adj_rank = chess.square_rank(adj_pawn)
+                            if (color == chess.WHITE and adj_rank > rank) or (color == chess.BLACK and adj_rank < rank):
+                                is_backward = False
+                                break
+                if not is_backward:
+                    break
+            if is_backward:
+                next_rank = rank + 1 if color == chess.WHITE else rank - 1
+                if 0 <= next_rank < 8:
+                    next_square = chess.square(file, next_rank)
+                    if board.is_attacked_by(not color, next_square):
+                        score += self.PARAMS['pawn_structure']['backward_penalty']
+        
+            # 5. Chuỗi Tốt (Pawn Chain)
+            for delta in [-9, 7]:  # Các hướng chéo
+                adj_square = pawn_sq + delta
+                if 0 <= adj_square < 64 and abs(chess.square_file(adj_square) - file) == 1:
+                    adj_piece = board.piece_at(adj_square)
+                    if adj_piece and adj_piece.piece_type == chess.PAWN and adj_piece.color == color:
+                        score += self.PARAMS['pawn_structure']['chain_bonus']
+    
+        return score
+    
+    def evaluate_center_control(self, board, color):
+        """Đánh giá kiểm soát trung tâm"""
+        score = 0
+        center_squares = [chess.D4, chess.D5, chess.E4, chess.E5]
+    
+        for square in center_squares:
+            # 1. Tốt ở trung tâm
+            piece = board.piece_at(square)
+            if piece and piece.piece_type == chess.PAWN and piece.color == color:
+                score += self.PARAMS['center_control']['pawn_center_bonus']
+        
+            # 2. Quân kiểm soát ô trung tâm
+            if board.is_attacked_by(color, square):
+                score += self.PARAMS['center_control']['piece_center_bonus']
+    
+        return score
 
 if __name__ == "__main__":
     evaluator = Evaluation()
