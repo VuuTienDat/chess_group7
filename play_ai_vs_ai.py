@@ -2,6 +2,7 @@ import pygame
 import chess
 from chess_game import ChessGame
 from Engine.engine import Engine
+from Engine.elo_system import EloSystem
 from utils import (
     WIDTH, HEIGHT, screen, images, menu_background, game_font, sounds,
     draw_board, draw_pieces, draw_button
@@ -26,6 +27,13 @@ def play_ai_vs_ai():
     board = chess.Board()
     engine1 = Engine(max_depth=4, max_time=10.0)
     engine2 = Engine(max_depth=4, max_time=10.0)
+    
+    # Initialize ELO system
+    elo_system = EloSystem()
+    engine1_id = "AI_1"
+    engine2_id = "AI_2"
+    rating1 = elo_system.get_rating(engine1_id)
+    rating2 = elo_system.get_rating(engine2_id)
     
     # Tạo queue để nhận kết quả từ các luồng
     result_queue = queue.Queue()
@@ -131,31 +139,47 @@ def play_ai_vs_ai():
         # Giới hạn FPS để giảm sử dụng CPU
         clock.tick(30)
     
-    # Hiển thị kết quả trò chơi
+    # Hiển thị kết quả trò chơi và cập nhật ELO
     if running:
         result = board.outcome()
         if result:
             if result.winner is None:
                 print("\nGame ended in a draw!")
                 result_text = "Game ended in a draw!"
+                # Update ELO for draw
+                new_rating1, new_rating2 = elo_system.update_ratings(engine1_id, engine2_id, 0.5)
             else:
                 winner = 'White' if result.winner else 'Black'
                 print(f"\n{winner} wins by {result.termination.name}!")
                 result_text = f"{winner} wins by {result.termination.name}!"
+                # Update ELO based on winner
+                elo_result = 1.0 if result.winner == chess.WHITE else 0.0
+                new_rating1, new_rating2 = elo_system.update_ratings(engine1_id, engine2_id, elo_result)
+                
+            # Add ELO changes to result text
+            result_text += f"\nELO Changes:"
+            result_text += f"\nAI 1 (White): {rating1} → {new_rating1} ({'+' if new_rating1 > rating1 else ''}{new_rating1 - rating1})"
+            result_text += f"\nAI 2 (Black): {rating2} → {new_rating2} ({'+' if new_rating2 > rating2 else ''}{new_rating2 - rating2})"
         else:
             print("\nGame ended without a result.")
             result_text = "Game ended without a result."
         
         # Hiển thị kết quả trên màn hình
-        font = pygame.font.Font(None, 48)
-        text = font.render(result_text, True, (255, 0, 0))
-        text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+        # Display result as multiple lines
+        font = pygame.font.Font(None, 36)
+        lines = result_text.split('\n')
+        line_height = 40
+        start_y = HEIGHT // 2 - (len(lines) * line_height) // 2
+        
+        for i, line in enumerate(lines):
+            text = font.render(line, True, (255, 0, 0))
+            text_rect = text.get_rect(center=(WIDTH // 2, start_y + i * line_height))
+            screen.blit(text, text_rect)
         
         # Tạo overlay mờ
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 150))
+        overlay.fill((0, 0, 0, 128))
         screen.blit(overlay, (0, 0))
-        screen.blit(text, text_rect)
         pygame.display.flip()
         
         # Đợi người dùng đóng cửa sổ
