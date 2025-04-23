@@ -115,21 +115,25 @@ def play_1vs1():
                             continue
                         
                         if game.selected_square is not None:
-                            target_piece = game.get_piece(square)
-                            move_result = game.move(game.selected_square, square)
-                            if move_result["valid"]:
-                                if move_result["promotion_required"]:
-                                    promotion_dialog = True
-                                    promotion_from = game.selected_square
-                                    promotion_to = square
+                                piece = game.get_piece(game.selected_square)
+                                target_piece = game.get_piece(square)
+                                move_result = game.move(game.selected_square, square)
+                                if move_result["valid"]:
+                                    if move_result["promotion_required"]:
+                                        # Nếu nước đi là phong cấp, hiển thị hộp thoại phong cấp
+                                        promotion_dialog = True
+                                        promotion_from = game.selected_square
+                                        promotion_to = square
+                                    else:
+                                        suggested_move = None
+                                        handle_move_outcome(game, target_piece)
                                 else:
-                                    suggested_move = None
-                                    handle_move_outcome(game, target_piece)
-                            else:
-                                game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
+                                    print(f"Nước đi không hợp lệ: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                                    game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
                         else:
                             piece = game.get_piece(square)
                             game.selected_square = square if piece and piece.color == game.board.turn else None
+                            print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
         
         if promotion_dialog:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)

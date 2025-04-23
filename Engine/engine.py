@@ -15,7 +15,7 @@ import random
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class Engine:
-    def __init__(self, max_depth=4, max_time=10.0, num_threads=4):
+    def __init__(self, max_depth=2, max_time=10.0, num_threads=4):
         """
         Initialize the chess engine with Lazy SMP support.
         

@@ -168,7 +168,7 @@ def play_vs_ai():
                                 if not move:
                                     print("[WARNING] AI couldn't suggest a move")
                                     continue
-                                suggested_move = move  # Lưu nước đi gợi ý trực tiếp
+                                suggested_move = move
                             except Exception as e:
                                 print(f"[ERROR] Failed to get move suggestion: {e}")
                                 continue
@@ -181,24 +181,25 @@ def play_vs_ai():
                                 continue
                             
                             if game.selected_square is not None:
+                                piece = game.get_piece(game.selected_square)
                                 target_piece = game.get_piece(square)
-                                move = chess.Move(game.selected_square, square)
-                                if move in game.board.legal_moves:
-                                    result = game.move(game.selected_square, square)
-                                    if result["promotion_required"]:
+                                move_result = game.move(game.selected_square, square)
+                                if move_result["valid"]:
+                                    if move_result["promotion_required"]:
+                                        # Nếu nước đi là phong cấp, hiển thị hộp thoại phong cấp
                                         promotion_dialog = True
                                         promotion_from = game.selected_square
                                         promotion_to = square
-                                        continue
-                                    if result["valid"]:
+                                    else:
                                         suggested_move = None
                                         handle_move_outcome(game, target_piece)
                                 else:
+                                    print(f"Nước đi không hợp lệ: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
                                     game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
                             else:
                                 piece = game.get_piece(square)
                                 game.selected_square = square if piece and piece.color == game.board.turn else None
-        
+                                print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
         if promotion_dialog:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 150))
@@ -231,9 +232,27 @@ def play_vs_ai():
                 try:
                     move = ai_move_queue.get_nowait()
                     if move and move in game.board.legal_moves:
-                        game.board.push(move)
-                        target_piece = game.get_piece(move.to_square)
-                        handle_move_outcome(game, target_piece)
+                        # Kiểm tra xem nước đi có phải là phong quân không
+                        piece = game.get_piece(move.from_square)
+                        is_promotion = (
+                            piece and
+                            piece.piece_type == chess.PAWN and
+                            (
+                                (piece.color == chess.WHITE and chess.square_rank(move.to_square) == 7) or
+                                (piece.color == chess.BLACK and chess.square_rank(move.to_square) == 0)
+                            )
+                        )
+                        if is_promotion:
+                            # Tự động chọn phong Hậu cho AI
+                            move = chess.Move(
+                                move.from_square,
+                                move.to_square,
+                                promotion=chess.QUEEN
+                            )
+                        if move in game.board.legal_moves:
+                            game.board.push(move)
+                            target_piece = game.get_piece(move.to_square)
+                            handle_move_outcome(game, target_piece)
                     game.ai_thinking = False
                 except queue.Empty:
                     pass
