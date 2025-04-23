@@ -18,8 +18,8 @@ class ChessGame:
             piece and
             piece.piece_type == chess.PAWN and
             (
-                (piece.color == chess.WHITE and chess.square_rank(to_square) == 7) or
-                (piece.color == chess.BLACK and chess.square_rank(to_square) == 0)
+                (piece.color == chess.WHITE and chess.square_rank(to_square) == 7) or  # Rank 8 (index 7) for white
+                (piece.color == chess.BLACK and chess.square_rank(to_square) == 0)     # Rank 1 (index 0) for black
             )
         )
 

@@ -184,16 +184,12 @@ def play_vs_ai():
                                 target_piece = game.get_piece(square)
                                 move = chess.Move(game.selected_square, square)
                                 if move in game.board.legal_moves:
-                                    if game.get_piece(game.selected_square).piece_type == chess.PAWN:
-                                        # Check for pawn promotion
-                                        if (game.board.turn == chess.WHITE and chess.square_rank(square) == 7) or \
-                                           (game.board.turn == chess.BLACK and chess.square_rank(square) == 0):
-                                            promotion_dialog = True
-                                            promotion_from = game.selected_square
-                                            promotion_to = square
-                                            continue
-                                    
                                     result = game.move(game.selected_square, square)
+                                    if result["promotion_required"]:
+                                        promotion_dialog = True
+                                        promotion_from = game.selected_square
+                                        promotion_to = square
+                                        continue
                                     if result["valid"]:
                                         suggested_move = None
                                         handle_move_outcome(game, target_piece)
