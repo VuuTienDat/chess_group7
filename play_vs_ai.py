@@ -73,7 +73,6 @@ def play_vs_ai():
     game = ChessGame()
     try:
         engine = Engine()
-        print("[INFO] AI engine initialized successfully")
     except Exception as e:
         print(f"[ERROR] Failed to initialize AI engine: {e}")
         return
@@ -165,23 +164,11 @@ def play_vs_ai():
                         if game.board.turn == player_color:
                             try:
                                 engine.set_position(game.board.fen())
-                                uci_move = engine.get_best_move()
-                                if not uci_move:
+                                move = engine.get_best_move()
+                                if not move:
                                     print("[WARNING] AI couldn't suggest a move")
                                     continue
-                                
-                                from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
-                                to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
-                                promotion = None
-                                if len(uci_move) == 5:
-                                    promotion_piece = uci_move[4].upper()
-                                    promotion = {
-                                        'Q': chess.QUEEN,
-                                        'R': chess.ROOK,
-                                        'B': chess.BISHOP,
-                                        'N': chess.KNIGHT
-                                    }.get(promotion_piece)
-                                suggested_move = chess.Move(from_square, to_square, promotion=promotion)
+                                suggested_move = move  # Lưu nước đi gợi ý trực tiếp
                             except Exception as e:
                                 print(f"[ERROR] Failed to get move suggestion: {e}")
                                 continue
@@ -241,12 +228,11 @@ def play_vs_ai():
                     target=ai_move_thread, 
                     args=(game.board.fen(), engine)
                 )
-                ai_thread.daemon = True  # Đảm bảo luồng kết thúc khi chương trình chính kết thúc
+                ai_thread.daemon = True
                 ai_thread.start()
             else:
                 # Kiểm tra xem AI đã tính toán xong chưa
                 try:
-                    # Non-blocking check
                     move = ai_move_queue.get_nowait()
                     if move and move in game.board.legal_moves:
                         game.board.push(move)
@@ -254,5 +240,4 @@ def play_vs_ai():
                         handle_move_outcome(game, target_piece)
                     game.ai_thinking = False
                 except queue.Empty:
-                    # AI vẫn đang tính toán
                     pass

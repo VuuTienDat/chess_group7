@@ -12,7 +12,12 @@ from notification import handle_move_outcome
 def play_1vs1():
     """Main player vs player game loop."""
     game = ChessGame()
-    engine = Engine()  # For move suggestions
+    try:
+        engine = Engine()
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize AI engine: {e}")
+        return
+    
     running = True
     suggested_move = None
     promotion_dialog = False
@@ -92,22 +97,16 @@ def play_1vs1():
                         game.undo()
                         suggested_move = None
                     elif btn_help.collidepoint(event.pos):
-                        # Get suggestion for current player
-                        engine.set_position(game.board.fen())
-                        uci_move = engine.get_best_move()
-                        if uci_move:
-                            from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
-                            to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
-                            promotion = None
-                            if len(uci_move) == 5:
-                                promotion_piece = uci_move[4].upper()
-                                promotion = {
-                                    'Q': chess.QUEEN,
-                                    'R': chess.ROOK,
-                                    'B': chess.BISHOP,
-                                    'N': chess.KNIGHT
-                                }.get(promotion_piece)
-                            suggested_move = chess.Move(from_square, to_square, promotion=promotion)
+                        try:
+                            engine.set_position(game.board.fen())
+                            move = engine.get_best_move()
+                            print(f"[DEBUG] Move type: {type(move)}, Move: {move.uci() if move else None}")
+                            if move:
+                                suggested_move = move
+                            else:
+                                print("[WARNING] AI couldn't suggest a move")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to get move suggestion: {e}")
                     elif btn_back.collidepoint(event.pos):
                         running = False
                     else:
