@@ -5,7 +5,7 @@ import sys
 import platform
 
 class Engine:
-    def __init__(self, depth=4):
+    def __init__(self, depth=6):
         self.depth = depth
         self.engine = None
         self.board = None  # Sẽ được gán từ FEN
