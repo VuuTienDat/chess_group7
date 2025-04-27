@@ -20,10 +20,8 @@ SQUARE_SIZE = WIDTH // 8
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Chess Game")
-pygame.mixer.init()
+pygame.mixer.init(0)
 
-pygame.mixer.music.load(os.path.join(music_path, "chessmusic.mp3"))
-pygame.mixer.music.play(-1)
 music_on = True
 move_sound = pygame.mixer.Sound(os.path.join(music_path, "Move.mp3"))
 capture_sound = pygame.mixer.Sound(os.path.join(music_path, "Capture.mp3"))
@@ -604,14 +602,14 @@ def toggle_music():
                     elif slider_rect.collidepoint(event.pos):
                         volume = (mouse_x - slider_min) / slider_rect.width
                         volume = max(0.0, min(volume, 1.0))
-                        pygame.mixer.music.set_volume(volume)
+                        pygame.mixer.music.set_volume(0)
             elif event.type == pygame.MOUSEMOTION:
                 if event.buttons[0]:
                     mouse_x, _ = event.pos
                     if slider_rect.collidepoint(event.pos):
                         volume = (mouse_x - slider_min) / slider_rect.width
                         volume = max(0.0, min(volume, 1.0))
-                        pygame.mixer.music.set_volume(volume)
+                        pygame.mixer.music.set_volume(0)
 
         screen.blit(menu_background, (0, 0))
         title = FONT.render("Adjust Volume", True, BLACK)
