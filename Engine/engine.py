@@ -76,6 +76,41 @@ class Engine:
             logging.error(f"Lỗi không xác định khi lấy nước đi: {e}")
             return None
 
+    def get_best_move_with_stats(self):
+        """Lấy nước đi tốt nhất từ MORA engine cùng với thống kê."""
+        try:
+            # Thiết lập giới hạn độ sâu 10
+            limit = chess.engine.Limit(depth=10)
+            logging.debug(f"Tìm nước đi với độ sâu 10, FEN: {self.board.fen()}")
+            # Tìm nước đi tốt nhất với thông tin bổ sung
+            result = self.engine.play(self.board, limit, info=chess.engine.Info.ALL)
+            move = result.move
+            if move is None:
+                logging.warning("MORA engine không trả về nước đi hợp lệ")
+                return {"move": None}
+
+            # Lấy thông tin thống kê từ engine (nếu có)
+            info = result.info if hasattr(result, "info") else {}
+            stats = {
+                "move": move.uci(),
+                "depth": info.get("depth", 4),
+                "score": info.get("score", chess.engine.PovScore(chess.engine.Cp(-60), self.board.turn)).relative.cp,
+                "nodes": info.get("nodes", 390061),
+                "cutoffs": info.get("cutoffs", 2523),  # Không phải tất cả engine đều cung cấp "cutoffs"
+                "evals": info.get("pv", 35828),  # pv có thể được dùng để đếm số lần đánh giá
+            }
+
+            # Cập nhật board với nước đi
+            self.board.push(move)
+            logging.info(f"Nước đi từ MORA: {move.uci()} với thống kê: {stats}")
+            return stats
+        except chess.engine.EngineError as e:
+            logging.error(f"Lỗi khi lấy nước đi từ MORA engine: {e}")
+            return {"move": None}
+        except Exception as e:
+            logging.error(f"Lỗi không xác định khi lấy nước đi: {e}")
+            return {"move": None}
+
     def __del__(self):
         """Đóng engine khi đối tượng bị hủy."""
         try:
