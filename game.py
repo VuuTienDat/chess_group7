@@ -22,7 +22,7 @@ image_path = os.path.join(bundle_dir, "Image")
 font_path = os.path.join(bundle_dir, "Font")
 
 # Window dimensions
-WIDTH, HEIGHT = 840, 720  # 640 board + 200 console
+WIDTH, HEIGHT = 840, 640  # Adjusted height to fit the board exactly (640x640)
 BOARD_WIDTH = 640
 CONSOLE_WIDTH = 200
 SQUARE_SIZE = BOARD_WIDTH // 8
@@ -42,7 +42,7 @@ check_sound = pygame.mixer.Sound(os.path.join(music_path, "Check.mp3"))
 checkmate_sound = pygame.mixer.Sound(os.path.join(music_path, "Checkmate.mp3"))
 
 # Board and piece setup
-board_colors = [(240, 217, 181), (181, 136, 99)]  # Light and dark squares (default colors)
+board_colors = [(255, 255, 255), (0, 100, 0)]  # Light squares (white), dark squares (dark green)
 images = {}
 pieces = ["P", "N", "B", "R", "Q", "K"]
 for color in ["w", "b"]:
@@ -54,13 +54,17 @@ for color in ["w", "b"]:
 
 # Fonts
 FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 40)
-# Revert to the original font
-CONSOLE_FONT = pygame.font.SysFont('arial', 16)  # Original font
+CONSOLE_FONT = pygame.font.SysFont('arial', 16)  # Reduced font size to avoid text clipping
+BOARD_LABEL_FONT = pygame.font.SysFont('arial', 14)  # Reduced font size for board labels
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 MENU_COLOR = (100, 100, 100)
 HOVER_COLOR = (255, 0, 0)
 CONSOLE_BG = (50, 50, 50)
+LABEL_COLOR = (0, 0, 0)  # Black for board labels
+
+# Color for highlighting suggested moves (same for both from and to squares)
+HIGHLIGHT_COLOR = (100, 149, 237, 128)  # Cornflower Blue with alpha
 
 # Load background
 menu_background = pygame.image.load(os.path.join(image_path, "landscape3.jpg"))
@@ -77,7 +81,6 @@ def draw_text(text, x, y, font=FONT, center=True, color=BLACK):
     return rect
 
 def draw_board(flipped=False):
-    font = pygame.font.SysFont('arial', 20)
     screen.blit(menu_background, (0, 0), (0, 0, BOARD_WIDTH, HEIGHT))
     pygame.draw.rect(screen, CONSOLE_BG, (BOARD_WIDTH, 0, CONSOLE_WIDTH, HEIGHT))
     for row in range(8):
@@ -87,17 +90,25 @@ def draw_board(flipped=False):
             color = board_colors[(row + col) % 2]
             pygame.draw.rect(screen, color,
                             (display_col * SQUARE_SIZE, display_row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
+    
+    # Draw labels on the board
     files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
     ranks = ['8', '7', '6', '5', '4', '3', '2', '1']
     if flipped:
         files = files[::-1]
         ranks = ranks[::-1]
+    
+    # Draw file labels (a-h) only on bottom rank (rank 1)
     for col in range(8):
-        label = font.render(files[col], True, BLACK)
-        screen.blit(label, (col * SQUARE_SIZE + SQUARE_SIZE // 2 - 10, 8 * SQUARE_SIZE + 5))
+        label = BOARD_LABEL_FONT.render(files[col], True, LABEL_COLOR)
+        display_col = 7 - col if flipped else col
+        screen.blit(label, (display_col * SQUARE_SIZE + 2, (7 * SQUARE_SIZE) + SQUARE_SIZE - 15))  # Closer to bottom and left
+    
+    # Draw rank labels (1-8) only on left file (file a)
     for row in range(8):
-        label = font.render(ranks[row], True, BLACK)
-        screen.blit(label, (5, row * SQUARE_SIZE + SQUARE_SIZE // 2 - 10))
+        label = BOARD_LABEL_FONT.render(ranks[row], True, LABEL_COLOR)
+        display_row = 7 - row if flipped else row
+        screen.blit(label, (2, display_row * SQUARE_SIZE + 2))  # Closer to left and top
 
 def draw_pieces(game, flipped=False):
     for square in chess.SQUARES:
@@ -110,12 +121,12 @@ def draw_pieces(game, flipped=False):
             name = ('w' if piece.color == chess.WHITE else 'b') + piece.symbol().upper()
             screen.blit(images[name], (display_col * SQUARE_SIZE, display_row * SQUARE_SIZE))
 
-def draw_console(game, is_ai_mode=False, ai_stats=None):
+def draw_console(game, is_ai_mode=False, ai_stats=None, mouse_pos=(0, 0), ai_thinking=False):
     # Clear the console area
     pygame.draw.rect(screen, CONSOLE_BG, (BOARD_WIDTH, 0, CONSOLE_WIDTH, HEIGHT))
 
     # Split the console into two panels
-    panel_height = HEIGHT // 2  # Roughly 360 pixels each
+    panel_height = HEIGHT // 2  # 320 pixels each with HEIGHT=640
 
     # --- Panel chess ---
     # Title
@@ -168,34 +179,45 @@ def draw_console(game, is_ai_mode=False, ai_stats=None):
         draw_text(f"Total moves: {total_moves}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
     # --- Panel AI (only in AI mode) ---
-    if is_ai_mode:
-        y_offset = panel_height + 10
-        title = CONSOLE_FONT.render("Panel AI", True, WHITE)
-        screen.blit(title, (BOARD_WIDTH + 10, y_offset))
+    y_offset = panel_height + 10
+    title = CONSOLE_FONT.render("Panel AI", True, WHITE)
+    screen.blit(title, (BOARD_WIDTH + 10, y_offset))
 
-        y_offset += 25
-        algorithm = "MORA (Alpha Beta)"
-        draw_text(f"Algorithm: {algorithm}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+    y_offset += 25
+    algorithm = "MORA (Alpha Beta)"
+    draw_text(f"Algorithm: {algorithm}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
-        y_offset += 25
-        # Only show DEPTH if ai_stats has data
-        depth = ai_stats.get("depth", "-") if ai_stats else "-"
-        draw_text(f"DEPTH: {depth}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+    y_offset += 25
+    # Only show DEPTH if ai_stats has data
+    depth = ai_stats.get("depth", "-") if ai_stats else "-"
+    draw_text(f"DEPTH: {depth}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
-        y_offset += 25
-        max_score = ai_stats.get("score", "-") if ai_stats else "-"
-        draw_text(f"MAX SCORE: {max_score}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+    y_offset += 25
+    max_score = ai_stats.get("score", "-") if ai_stats else "-"
+    draw_text(f"MAX SCORE: {max_score}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
-        y_offset += 25
-        # Only display the table if ai_stats has actual data, and only show NODES and TIME
-        if ai_stats and "nodes" in ai_stats:
-            nodes_header = "NODES".ljust(10)
-            time_header = "TIME".ljust(8)
-            draw_text(f"{nodes_header}{time_header}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-            y_offset += 20
-            nodes = str(ai_stats.get("nodes", 0)).ljust(10)
-            time_taken = f"{ai_stats.get('time', 0.0):.4f}".ljust(8)
-            draw_text(f"{nodes}{time_taken}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+    y_offset += 25
+    # Only display the table if ai_stats has actual data, and only show NODES and TIME
+    if ai_stats and "nodes" in ai_stats:
+        nodes_header = "NODES".ljust(10)
+        time_header = "TIME".ljust(8)
+        draw_text(f"{nodes_header}{time_header}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+        y_offset += 20
+        nodes = str(ai_stats.get("nodes", 0)).ljust(10)
+        time_taken = f"{ai_stats.get('time', 0.0):.4f}".ljust(8)
+        draw_text(f"{nodes}{time_taken}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+
+    # Draw "AI is thinking" above the buttons if AI is thinking, centered and with more space
+    if ai_thinking:
+        draw_text("AI Thinking...", BOARD_WIDTH + 70, HEIGHT - 120, font=CONSOLE_FONT, center=False, color=WHITE)
+
+    # Draw buttons in the console area (below Panel AI), centered in the console
+    y_offset = HEIGHT - 60  # Adjusted for new height to avoid overlap
+    btn_undo = draw_button("Undo", 655, y_offset, 50, 30, (50, 50, 200), (100, 100, 255), mouse_pos)  # Reduced size
+    btn_help = draw_button("Help", 715, y_offset, 50, 30, (50, 200, 50), (100, 255, 100), mouse_pos)  # Reduced size
+    btn_back = draw_button("Back", 775, y_offset, 50, 30, (200, 50, 50), (255, 100, 100), mouse_pos)  # Reduced size
+
+    return btn_undo, btn_help, btn_back
 
 def get_square_from_mouse(pos, flipped=False):
     x, y = pos
@@ -225,13 +247,44 @@ def draw_move_hints(game, selected_square, flipped=False):
                       display_row * SQUARE_SIZE + SQUARE_SIZE // 2)
             pygame.draw.circle(screen, (120, 150, 100), center, 15)
 
+def draw_suggested_move(suggested_move, flipped=False):
+    if not suggested_move:
+        return
+
+    # Get the from and to squares
+    from_square = suggested_move.from_square
+    to_square = suggested_move.to_square
+
+    # Calculate display positions
+    from_col = chess.square_file(from_square)
+    from_row = 7 - chess.square_rank(from_square)
+    to_col = chess.square_file(to_square)
+    to_row = 7 - chess.square_rank(to_square)
+
+    # Adjust for flipped board
+    display_from_col = 7 - from_col if flipped else from_col
+    display_from_row = 7 - from_row if flipped else from_row
+    display_to_col = 7 - to_col if flipped else to_col
+    display_to_row = 7 - to_row if flipped else to_row
+
+    # Highlight both the from and to squares with the same color
+    highlight_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+    
+    # Highlight the "from" square
+    highlight_surface.fill(HIGHLIGHT_COLOR)
+    screen.blit(highlight_surface, (display_from_col * SQUARE_SIZE, display_from_row * SQUARE_SIZE))
+    
+    # Highlight the "to" square
+    highlight_surface.fill(HIGHLIGHT_COLOR)
+    screen.blit(highlight_surface, (display_to_col * SQUARE_SIZE, display_to_row * SQUARE_SIZE))
+
 def draw_button(text, x, y, w, h, color, hover_color, mouse_pos):
     rect = pygame.Rect(x, y, w, h)
     if rect.collidepoint(mouse_pos):
         pygame.draw.rect(screen, hover_color, rect)
     else:
         pygame.draw.rect(screen, color, rect)
-    draw_text(text, x + w // 2, y + h // 2, center=True, color=WHITE)
+    draw_text(text, x + w // 2, y + h // 2, center=True, color=WHITE, font=CONSOLE_FONT)
     return rect
 
 def notification(game, message):
@@ -239,7 +292,7 @@ def notification(game, message):
         screen.blit(menu_background, (0, 0))
         draw_text(message, WIDTH // 2, HEIGHT // 2, color=(255, 0, 0))
         mouse_pos = pygame.mouse.get_pos()
-        btn_back = draw_button("Back", WIDTH - 110, 660, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+        btn_back = draw_button("Back", WIDTH - 110, HEIGHT - 50, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -314,31 +367,10 @@ def play_vs_ai():
         screen.fill((0, 0, 0))
         draw_board(flipped=flipped)
         draw_pieces(game, flipped=flipped)
-        draw_console(game, is_ai_mode=True, ai_stats=ai_stats)  # Pass AI stats
         mouse_pos = pygame.mouse.get_pos()
-        btn_undo = draw_button("Undo", 10, 675, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-        btn_help = draw_button("Help", 120, 675, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)
-        btn_back = draw_button("Back", BOARD_WIDTH - 110, 675, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
-        if ai_thinking:
-            draw_text("AI Thinking...", BOARD_WIDTH // 2, HEIGHT - 30, font=pygame.font.Font(None, 30), color=(255, 255, 0))
+        btn_undo, btn_help, btn_back = draw_console(game, is_ai_mode=True, ai_stats=ai_stats, mouse_pos=mouse_pos, ai_thinking=ai_thinking)
         draw_move_hints(game, game.selected_square, flipped=flipped)
-        if suggested_move:
-            from_square = suggested_move.from_square
-            from_col = chess.square_file(from_square)
-            from_row = 7 - chess.square_rank(from_square)
-            display_from_col = 7 - from_col if flipped else from_col
-            display_from_row = 7 - from_row if flipped else from_row
-            from_center = (display_from_col * SQUARE_SIZE + SQUARE_SIZE // 2,
-                           display_from_row * SQUARE_SIZE + SQUARE_SIZE // 2)
-            pygame.draw.circle(screen, (0, 0, 255), from_center, 20, 3)
-            to_square = suggested_move.to_square
-            to_col = chess.square_file(to_square)
-            to_row = 7 - chess.square_rank(to_square)
-            display_to_col = 7 - to_col if flipped else to_col
-            display_to_row = 7 - to_row if flipped else to_row
-            to_center = (display_to_col * SQUARE_SIZE + SQUARE_SIZE // 2,
-                         display_to_row * SQUARE_SIZE + SQUARE_SIZE // 2)
-            pygame.draw.circle(screen, (255, 255, 0), to_center, 20, 3)
+        draw_suggested_move(suggested_move, flipped=flipped)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -424,15 +456,6 @@ def play_vs_ai():
                         else:
                             print(f"Không phải lượt của bạn. Đến lượt: {'BLACK' if game.board.turn == chess.BLACK else 'WHITE'}")
                             print(f"Trạng thái bàn cờ FEN: {game.board.fen()}")
-        if promotion_dialog:
-            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 150))
-            screen.blit(overlay, (0, 0))
-            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, FONT, True, (255, 255, 255))
-            btn_queen = draw_button("Queen", WIDTH // 2 - 50, HEIGHT // 2 - 100, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-            btn_rook = draw_button("Rook", WIDTH // 2 - 50, HEIGHT // 2 - 40, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-            btn_bishop = draw_button("Bishop", WIDTH // 2 - 50, HEIGHT // 2 + 20, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-            btn_knight = draw_button("Knight", WIDTH // 2 - 50, HEIGHT // 2 + 80, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
         if game.board.turn != player_color and not promotion_dialog and not ai_thinking:
             print("Đến lượt AI. Turn:", "Black" if game.board.turn == chess.BLACK else "White")
             print("FEN gửi cho engine:", game.board.fen())
@@ -514,29 +537,10 @@ def play_1vs1():
         screen.fill((0, 0, 0))
         draw_board(flipped=flipped)
         draw_pieces(game, flipped=flipped)
-        draw_console(game, is_ai_mode=False)  # No AI stats in 1v1 mode
         mouse_pos = pygame.mouse.get_pos()
-        btn_undo = draw_button("Undo", 10, 675, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-        btn_help = draw_button("Help", 120, 675, 100, 40, (50, 200, 50), (100, 255, 100), mouse_pos)
-        btn_back = draw_button("Back", BOARD_WIDTH - 110, 675, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
+        btn_undo, btn_help, btn_back = draw_console(game, is_ai_mode=False, mouse_pos=mouse_pos, ai_thinking=False)
         draw_move_hints(game, game.selected_square, flipped=flipped)
-        if suggested_move:
-            from_square = suggested_move.from_square
-            from_col = chess.square_file(from_square)
-            from_row = 7 - chess.square_rank(from_square)
-            display_from_col = 7 - from_col if flipped else from_col
-            display_from_row = 7 - from_row if flipped else from_row
-            from_center = (display_from_col * SQUARE_SIZE + SQUARE_SIZE // 2,
-                           display_from_row * SQUARE_SIZE + SQUARE_SIZE // 2)
-            pygame.draw.circle(screen, (0, 0, 255), from_center, 20, 3)
-            to_square = suggested_move.to_square
-            to_col = chess.square_file(to_square)
-            to_row = 7 - chess.square_rank(to_square)
-            display_to_col = 7 - to_col if flipped else to_col
-            display_to_row = 7 - to_row if flipped else to_row
-            to_center = (display_to_col * SQUARE_SIZE + SQUARE_SIZE // 2,
-                         display_to_row * SQUARE_SIZE + SQUARE_SIZE // 2)
-            pygame.draw.circle(screen, (255, 255, 0), to_center, 20, 3)
+        draw_suggested_move(suggested_move, flipped=flipped)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
