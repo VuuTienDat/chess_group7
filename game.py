@@ -54,12 +54,13 @@ for color in ["w", "b"]:
 
 # Fonts
 FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 40)
+TITLE_FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 48)  # Larger font for "Chess Game"
 CONSOLE_FONT = pygame.font.SysFont('arial', 16)  # Reduced font size to avoid text clipping
 BOARD_LABEL_FONT = pygame.font.SysFont('arial', 14)  # Reduced font size for board labels
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 MENU_COLOR = (100, 100, 100)
-HOVER_COLOR = (255, 0, 0)
+HOVER_COLOR = (0, 128, 0)  # Dark green for hover
 CONSOLE_BG = (50, 50, 50)
 LABEL_COLOR = (0, 0, 0)  # Black for board labels
 
@@ -102,7 +103,7 @@ def draw_board(flipped=False):
     for col in range(8):
         label = BOARD_LABEL_FONT.render(files[col], True, LABEL_COLOR)
         display_col = 7 - col if flipped else col
-        screen.blit(label, (display_col * SQUARE_SIZE + 2, (7 * SQUARE_SIZE) + SQUARE_SIZE - 15))  # Closer to bottom and left
+        screen.blit(label, (display_col * SQUARE_SIZE + 2, (7 * SQUARE_SIZE) + SQUARE_SIZE - 20))  # Adjusted to raise labels up
     
     # Draw rank labels (1-8) only on left file (file a)
     for row in range(8):
@@ -278,13 +279,13 @@ def draw_suggested_move(suggested_move, flipped=False):
     highlight_surface.fill(HIGHLIGHT_COLOR)
     screen.blit(highlight_surface, (display_to_col * SQUARE_SIZE, display_to_row * SQUARE_SIZE))
 
-def draw_button(text, x, y, w, h, color, hover_color, mouse_pos):
+def draw_button(text, x, y, w, h, color, hover_color, mouse_pos, text_color=WHITE):
     rect = pygame.Rect(x, y, w, h)
     if rect.collidepoint(mouse_pos):
         pygame.draw.rect(screen, hover_color, rect)
     else:
         pygame.draw.rect(screen, color, rect)
-    draw_text(text, x + w // 2, y + h // 2, center=True, color=WHITE, font=CONSOLE_FONT)
+    draw_text(text, x + w // 2, y + h // 2, center=True, color=text_color, font=CONSOLE_FONT)
     return rect
 
 def notification(game, message):
@@ -310,8 +311,10 @@ def choose_player_color():
         screen.blit(menu_background, (0, 0))
         draw_text("Choose Your Color", WIDTH // 2, HEIGHT // 2 - 100, color=BLACK)
         mouse_pos = pygame.mouse.get_pos()
-        btn_white = draw_button("White", WIDTH // 2 - 100, HEIGHT // 2 - 40, 200, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-        btn_black = draw_button("Black", WIDTH // 2 - 100, HEIGHT // 2 + 20, 200, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+        # Nút "White" - màu trắng, chữ đen
+        btn_white = draw_button("White", WIDTH // 2 - 100, HEIGHT // 2 - 40, 200, 40, (255, 255, 255), (200, 200, 200), mouse_pos, text_color=BLACK)
+        # Nút "Black" - màu đen, chữ trắng
+        btn_black = draw_button("Black", WIDTH // 2 - 100, HEIGHT // 2 + 20, 200, 40, (0, 0, 0), (50, 50, 50), mouse_pos, text_color=WHITE)
         btn_back = draw_button("Back", WIDTH // 2 - 100, HEIGHT // 2 + 80, 200, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -344,13 +347,13 @@ def play_vs_ai():
     ai_stats = {}  # To store AI statistics
 
     def get_ai_move():
-        print("AI đang suy nghĩ...")
+        print("AI is thinking...")
         start_time = time.time()  # Start timing
         engine.set_position(game.board.fen())
         result = engine.get_best_move_with_stats()
         end_time = time.time()  # End timing
         time_taken = end_time - start_time
-        print("Nước đi từ engine:", result["move"])
+        print("Move from engine:", result["move"])
         # Update AI stats with values from engine
         ai_stats.update({
             "depth": result.get("depth", "-"),
@@ -434,7 +437,7 @@ def play_vs_ai():
                             if game.selected_square is not None:
                                 piece = game.get_piece(game.selected_square)
                                 target_piece = game.get_piece(square)
-                                print(f"Trước nước đi - FEN: {game.board.fen()}")
+                                print(f"Before move - FEN: {game.board.fen()}")
                                 move_result = game.move(game.selected_square, square)
                                 if move_result["valid"]:
                                     if move_result["promotion_required"]:
@@ -444,21 +447,21 @@ def play_vs_ai():
                                     else:
                                         suggested_move = None
                                         handle_move_outcome(game, target_piece)
-                                        print(f"Sau nước đi của người chơi - Lịch sử: {[m.uci() for m in game.move_history]}")
-                                        print(f"Sau nước đi của người chơi - FEN: {game.board.fen()}")
+                                        print(f"After player's move - History: {[m.uci() for m in game.move_history]}")
+                                        print(f"After player's move - FEN: {game.board.fen()}")
                                 else:
-                                    print(f"Nước đi không hợp lệ: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                                    print(f"Invalid move: from {chess.square_name(game.selected_square)} to {chess.square_name(square)}")
                                     game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
                             else:
                                 piece = game.get_piece(square)
                                 game.selected_square = square if piece and piece.color == game.board.turn else None
-                                print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
+                                print(f"Selected source square: {square} ({chess.square_name(square)}), piece: {piece}")
                         else:
-                            print(f"Không phải lượt của bạn. Đến lượt: {'BLACK' if game.board.turn == chess.BLACK else 'WHITE'}")
-                            print(f"Trạng thái bàn cờ FEN: {game.board.fen()}")
+                            print(f"Not your turn. Current turn: {'BLACK' if game.board.turn == chess.BLACK else 'WHITE'}")
+                            print(f"Board state FEN: {game.board.fen()}")
         if game.board.turn != player_color and not promotion_dialog and not ai_thinking:
-            print("Đến lượt AI. Turn:", "Black" if game.board.turn == chess.BLACK else "White")
-            print("FEN gửi cho engine:", game.board.fen())
+            print("AI's turn. Turn:", "Black" if game.board.turn == chess.BLACK else "White")
+            print("FEN sent to engine:", game.board.fen())
             ai_thinking = True
             ai_thread = threading.Thread(target=get_ai_move)
             ai_thread.start()
@@ -481,21 +484,21 @@ def play_vs_ai():
                 if move_result["valid"]:
                     target_piece = game.get_piece(to_square)
                     handle_move_outcome(game, target_piece)
-                    print(f"Sau nước đi của AI - Lịch sử: {[m.uci() for m in game.move_history]}")
-                    print(f"Sau nước đi của AI - FEN: {game.board.fen()}")
+                    print(f"After AI's move - History: {[m.uci() for m in game.move_history]}")
+                    print(f"After AI's move - FEN: {game.board.fen()}")
                 else:
-                    print(f"Nước đi không hợp lệ từ engine: {uci_move}")
+                    print(f"Invalid move from engine: {uci_move}")
             else:
-                print("Engine không trả về nước đi hợp lệ.")
+                print("Engine did not return a valid move.")
                 if game.board.is_checkmate():
-                    winner = "AI" if game.board.turn != player_color else "Bạn"
-                    notification(game, f"Chiếu hết! {winner} thắng.")
+                    winner = "AI" if game.board.turn != player_color else "You"
+                    notification(game, f"Checkmate! {winner} wins.")
                 elif game.board.is_stalemate():
-                    notification(game, "Hòa cờ!")
+                    notification(game, "Stalemate!")
                 elif game.board.is_insufficient_material():
-                    notification(game, "Hòa: Không đủ quân!")
+                    notification(game, "Draw: Insufficient material!")
                 else:
-                    notification(game, "Không có nước đi hợp lệ. Kết thúc ván.")
+                    notification(game, "No valid moves. Game over.")
                 game.board.reset()
                 game.move_history.clear()
                 ai_stats.clear()  # Clear AI stats on game end
@@ -506,16 +509,16 @@ def play_vs_ai():
 def handle_move_outcome(game, target_piece=None):
     if game.board.is_checkmate():
         checkmate_sound.play()
-        winner = "Trắng" if game.board.turn == chess.BLACK else "Đen"
-        notification(game, f"Chiếu hết! {winner} thắng!")
+        winner = "White" if game.board.turn == chess.BLACK else "Black"
+        notification(game, f"Checkmate! {winner} wins!")
     elif game.board.is_stalemate():
-        notification(game, "Hòa cờ!")
+        notification(game, "Stalemate!")
     elif game.board.is_insufficient_material():
-        notification(game, "Hòa: Không đủ quân!")
+        notification(game, "Draw: Insufficient material!")
     elif game.board.is_seventyfive_moves():
-        notification(game, "Hòa: Quy tắc 75 nước!")
+        notification(game, "Draw: 75-move rule!")
     elif game.board.is_fivefold_repetition():
-        notification(game, "Hòa: Lặp lại 5 lần!")
+        notification(game, "Draw: Fivefold repetition!")
     if target_piece:
         capture_sound.play()
     else:
@@ -608,12 +611,12 @@ def play_1vs1():
                                     suggested_move = None
                                     handle_move_outcome(game, target_piece)
                             else:
-                                print(f"Nước đi không hợp lệ: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                                print(f"Invalid move: from {chess.square_name(game.selected_square)} to {chess.square_name(square)}")
                                 game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
                         else:
                             piece = game.get_piece(square)
                             game.selected_square = square if piece and piece.color == game.board.turn else None
-                            print(f"Chọn ô nguồn: {square} ({chess.square_name(square)}), quân: {piece}")
+                            print(f"Selected source square: {square} ({chess.square_name(square)}), piece: {piece}")
         if promotion_dialog:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 150))
@@ -629,21 +632,21 @@ def main_menu():
     running = True
     while running:
         screen.blit(menu_background, (0, 0))
-        title = FONT.render("Chess Game", True, BLACK)
+        title = TITLE_FONT.render("Chess Game", True, BLACK)  # Use larger font for title
         screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 80))
-        btn_1v1 = draw_text("Play 1 vs 1", WIDTH // 2, 200)
-        btn_vs_ai = draw_text("Play vs AI", WIDTH // 2, 270)
-        btn_music = draw_text("Music", WIDTH // 2, 340)
-        btn_quit = draw_text("Exit", WIDTH // 2, 410)
+        btn_1v1 = draw_text("Play 1 vs 1", WIDTH // 2, 250)  # Moved down
+        btn_vs_ai = draw_text("Play vs AI", WIDTH // 2, 320)  # Moved down
+        btn_music = draw_text("Music", WIDTH // 2, 390)  # Moved down
+        btn_quit = draw_text("Exit", WIDTH // 2, 460)  # Moved down
         mouse_x, mouse_y = pygame.mouse.get_pos()
         if btn_1v1.collidepoint(mouse_x, mouse_y):
-            draw_text("Play 1 vs 1", WIDTH // 2, 200, color=HOVER_COLOR)
+            draw_text("Play 1 vs 1", WIDTH // 2, 250, color=HOVER_COLOR)
         if btn_vs_ai.collidepoint(mouse_x, mouse_y):
-            draw_text("Play vs AI", WIDTH // 2, 270, color=HOVER_COLOR)
+            draw_text("Play vs AI", WIDTH // 2, 320, color=HOVER_COLOR)
         if btn_music.collidepoint(mouse_x, mouse_y):
-            draw_text("Music", WIDTH // 2, 340, color=HOVER_COLOR)
+            draw_text("Music", WIDTH // 2, 390, color=HOVER_COLOR)
         if btn_quit.collidepoint(mouse_x, mouse_y):
-            draw_text("Exit", WIDTH // 2, 410, color=HOVER_COLOR)
+            draw_text("Exit", WIDTH // 2, 460, color=HOVER_COLOR)
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -700,7 +703,7 @@ def toggle_music():
         pygame.draw.rect(screen, (100, 100, 100), fill_rect)
         handle_x = slider_min + fill_width
         handle_y = slider_rect.y + slider_rect.height // 2
-        pygame.draw.circle(screen, (255, 0, 0), (handle_x, handle_y), handle_radius)
+        pygame.draw.circle(screen, (0, 128, 0), (handle_x, handle_y), handle_radius)  # Dark green handle
         back_rect = pygame.Rect(WIDTH//2 - 50, slider_rect.y + slider_rect.height + 40, 100, 40)
         pygame.draw.rect(screen, HOVER_COLOR, back_rect)
         back_text = FONT.render("Back", True, WHITE)
