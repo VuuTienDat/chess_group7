@@ -8,23 +8,23 @@
             "args": [
                 "-fdiagnostics-color=always",
                 "-g",
-                "C:\\engine\\attacks.cpp",
-                "C:\\engine\\bitboards.cpp",
-                "C:\\engine\\evaluation.cpp",
-                "C:\\engine\\main.cpp",
-                "C:\\engine\\move.cpp",
-                "C:\\engine\\movegenerator.cpp",
-                "C:\\engine\\pawnhashtable.cpp",
-                "C:\\engine\\position.cpp",
-                "C:\\engine\\search.cpp",
-                "C:\\engine\\timemanagement.cpp",
-                "C:\\engine\\transpositiontable.cpp",
-                "C:\\engine\\uci.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\attacks.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\bitboards.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\evaluation.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\main.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\move.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\movegenerator.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\pawnhashtable.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\position.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\search.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\timemanagement.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\transpositiontable.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\uci.cpp",
                 "-o",
-                "C:\\engine\\\\engine.exe"
+                "C:\\chess_group7\\Engine\\bluefish\\engine.exe"
             ],
             "options": {
-                "cwd": "C:\\engine"
+                "cwd": "C:\\chess_group7\\Engine\\bluefish"
             },
             "problemMatcher": [
                 "$gcc"

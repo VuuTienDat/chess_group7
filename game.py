@@ -140,16 +140,32 @@ def draw_console(game, is_ai_mode=False, ai_stats=None, mouse_pos=(0, 0), ai_thi
 
     # Split the console into two panels
     panel_height = HEIGHT // 2  # 320 pixels each with HEIGHT=640
+    
+    TITLE_COLOR = (255, 215, 0)
 
     # --- Panel chess ---
     # Title
-    title = CONSOLE_FONT.render("Panel chess", True, WHITE)
-    screen.blit(title, (BOARD_WIDTH + 10, 10))
+    title = CONSOLE_FONT.render("Panel chess", True, TITLE_COLOR)
+    title_rect = title.get_rect(center=(BOARD_WIDTH + CONSOLE_WIDTH // 2, 10 + title.get_height() // 2))
+    screen.blit(title, title_rect)
 
     # Game state info
     y_offset = 40
     turn = "WHITE" if game.board.turn == chess.WHITE else "BLACK"
-    draw_text(f"Turn: {turn}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+
+    # Define colors for WHITE and BLACK
+    WHITE_TURN_COLOR = (255, 255, 255)  # Bright white for WHITE
+    BLACK_TURN_COLOR = (150, 150, 150)  # Dark gray for BLACK
+    turn_color = WHITE_TURN_COLOR if turn == "WHITE" else BLACK_TURN_COLOR
+
+    # Render "Turn:" and the turn value ("WHITE" or "BLACK") separately
+    turn_label = CONSOLE_FONT.render("Turn: ", True, WHITE)  # "Turn:" in default white
+    turn_value = CONSOLE_FONT.render(turn, True, turn_color)  # "WHITE" or "BLACK" with specific color
+
+    # Calculate positions to display them side by side
+    screen.blit(turn_label, (BOARD_WIDTH + 10, y_offset))
+    turn_label_width = turn_label.get_width()
+    screen.blit(turn_value, (BOARD_WIDTH + 10 + turn_label_width, y_offset))
 
     y_offset += 25
     possible_moves = len(list(game.board.legal_moves))
@@ -164,7 +180,9 @@ def draw_console(game, is_ai_mode=False, ai_stats=None, mouse_pos=(0, 0), ai_thi
     white_label = CONSOLE_FONT.render("White", True, WHITE)
     black_label = CONSOLE_FONT.render("Black", True, WHITE)
     screen.blit(white_label, (BOARD_WIDTH + 10, y_offset))
-    screen.blit(black_label, (BOARD_WIDTH + 80, y_offset))
+# "Black" aligned to the right (adjust based on console width)
+    black_label_width = black_label.get_width()
+    screen.blit(black_label, (BOARD_WIDTH + CONSOLE_WIDTH - black_label_width - 10, y_offset))  # 10 pixels padding from right edge
 
     y_offset += 25
     # Get moves in UCI format directly from move_history
@@ -183,18 +201,19 @@ def draw_console(game, is_ai_mode=False, ai_stats=None, mouse_pos=(0, 0), ai_thi
         black_move_label = CONSOLE_FONT.render(black_move, True, WHITE) if black_move else None
         screen.blit(white_move_label, (BOARD_WIDTH + 10, y_offset))
         if black_move_label:
-            screen.blit(black_move_label, (BOARD_WIDTH + 80, y_offset))
+            black_move_width = black_move_label.get_width()
+            screen.blit(black_move_label, (BOARD_WIDTH + CONSOLE_WIDTH - black_move_width - 10, y_offset))  # Align black move to the right
         y_offset += 20
 
     # Display total moves at the bottom
-    if paired_moves:
-        total_moves = len(paired_moves)
-        draw_text(f"Total moves: {total_moves}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+    total_moves = len(paired_moves)  # Will be 0 if no moves yet
+    draw_text(f"Total moves: {total_moves}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
     # --- Panel AI (only in AI mode) ---
     y_offset = panel_height + 10
-    title = CONSOLE_FONT.render("Panel AI", True, WHITE)
-    screen.blit(title, (BOARD_WIDTH + 10, y_offset))
+    title = CONSOLE_FONT.render("Panel AI", True, TITLE_COLOR)
+    title_rect = title.get_rect(center=(BOARD_WIDTH + CONSOLE_WIDTH // 2, y_offset + title.get_height() // 2))
+    screen.blit(title, title_rect)
 
     y_offset += 25
     algorithm = "MORA (Alpha Beta)"
@@ -362,7 +381,7 @@ def play_vs_ai():
     ai_stats = {}
 
     def get_ai_move():
-        print("AI is thinking...")
+        print("AI is thinking!...")
         start_time = time.time()
         engine.set_position(game.board.fen())
         result = engine.get_best_move_with_stats()
@@ -548,7 +567,7 @@ def play_vs_ai():
                         print(f"Trạng thái selected_square sau khi xử lý: {chess.square_name(game.selected_square) if game.selected_square is not None else 'None'}")
         
         if game.board.turn != player_color and not promotion_dialog and not ai_thinking:
-            print("AI's turn. Turn:", "Black" if game.board.turn == chess.BLACK else "White")
+            print("AI's turn. Turn123:", "Black" if game.board.turn == chess.BLACK else "White")
             print("FEN sent to engine:", game.board.fen())
             ai_thinking = True
             ai_thread = threading.Thread(target=get_ai_move)
