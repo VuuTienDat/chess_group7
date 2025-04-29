@@ -54,6 +54,7 @@ for color in ["w", "b"]:
 
 # Fonts
 FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 40)
+VICTORY_FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 120)  # 3 times larger for victory message
 TITLE_FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 48)  # Larger font for "Chess Game"
 CONSOLE_FONT = pygame.font.SysFont('arial', 16)  # Reduced font size to avoid text clipping
 BOARD_LABEL_FONT = pygame.font.SysFont('arial', 14)  # Reduced font size for board labels
@@ -63,6 +64,7 @@ MENU_COLOR = (100, 100, 100)
 HOVER_COLOR = (0, 128, 0)  # Dark green for hover
 CONSOLE_BG = (50, 50, 50)
 LABEL_COLOR = (0, 0, 0)  # Black for board labels
+BORDER_COLOR = (255, 255, 255)  # White border for promotion buttons
 
 # Color for highlighting suggested moves (same for both from and to squares)
 HIGHLIGHT_COLOR = (100, 149, 237, 128)  # Cornflower Blue with alpha
@@ -71,13 +73,23 @@ HIGHLIGHT_COLOR = (100, 149, 237, 128)  # Cornflower Blue with alpha
 menu_background = pygame.image.load(os.path.join(image_path, "landscape3.jpg"))
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
 
-def draw_text(text, x, y, font=FONT, center=True, color=BLACK):
+def draw_text(text, x, y, font=FONT, center=True, color=BLACK, outline_color=None):
     label = font.render(text, True, color)
     rect = label.get_rect()
     if center:
         rect.center = (x, y)
     else:
         rect.topleft = (x, y)
+    
+    # Draw outline if specified (used for black text to ensure visibility)
+    if outline_color:
+        outline = font.render(text, True, outline_color)
+        for dx in [-2, 0, 2]:
+            for dy in [-2, 0, 2]:
+                if dx != 0 or dy != 0:
+                    outline_rect = outline.get_rect(center=(x + dx, y + dy))
+                    screen.blit(outline, outline_rect)
+    
     screen.blit(label, rect)
     return rect
 
@@ -268,7 +280,7 @@ def draw_suggested_move(suggested_move, flipped=False):
     display_to_col = 7 - to_col if flipped else to_col
     display_to_row = 7 - to_row if flipped else to_row
 
-    # Highlight both the from and to squares with the same color
+    # Highlight both the "from" and to squares with the same color
     highlight_surface = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
     
     # Highlight the "from" square
@@ -279,19 +291,23 @@ def draw_suggested_move(suggested_move, flipped=False):
     highlight_surface.fill(HIGHLIGHT_COLOR)
     screen.blit(highlight_surface, (display_to_col * SQUARE_SIZE, display_to_row * SQUARE_SIZE))
 
-def draw_button(text, x, y, w, h, color, hover_color, mouse_pos, text_color=WHITE):
+def draw_button(text, x, y, w, h, color, hover_color, mouse_pos, text_color=WHITE, border=False):
     rect = pygame.Rect(x, y, w, h)
     if rect.collidepoint(mouse_pos):
         pygame.draw.rect(screen, hover_color, rect)
     else:
         pygame.draw.rect(screen, color, rect)
+    if border:
+        pygame.draw.rect(screen, BORDER_COLOR, rect, 2)  # Draw border (now white)
     draw_text(text, x + w // 2, y + h // 2, center=True, color=text_color, font=CONSOLE_FONT)
     return rect
 
-def notification(game, message):
+def notification(game, message, color=(255, 0, 0), is_victory=False, outline_color=None):
     while True:
         screen.blit(menu_background, (0, 0))
-        draw_text(message, WIDTH // 2, HEIGHT // 2, color=(255, 0, 0))
+        # Use VICTORY_FONT for victory messages, otherwise use FONT
+        font_to_use = VICTORY_FONT if is_victory else FONT
+        draw_text(message, WIDTH // 2, HEIGHT // 2, font=font_to_use, color=color, outline_color=outline_color)
         mouse_pos = pygame.mouse.get_pos()
         btn_back = draw_button("Back", WIDTH - 110, HEIGHT - 50, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         for event in pygame.event.get():
@@ -311,9 +327,7 @@ def choose_player_color():
         screen.blit(menu_background, (0, 0))
         draw_text("Choose Your Color", WIDTH // 2, HEIGHT // 2 - 100, color=BLACK)
         mouse_pos = pygame.mouse.get_pos()
-        # Nút "White" - màu trắng, chữ đen
         btn_white = draw_button("White", WIDTH // 2 - 100, HEIGHT // 2 - 40, 200, 40, (255, 255, 255), (200, 200, 200), mouse_pos, text_color=BLACK)
-        # Nút "Black" - màu đen, chữ trắng
         btn_black = draw_button("Black", WIDTH // 2 - 100, HEIGHT // 2 + 20, 200, 40, (0, 0, 0), (50, 50, 50), mouse_pos, text_color=WHITE)
         btn_back = draw_button("Back", WIDTH // 2 - 100, HEIGHT // 2 + 80, 200, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         for event in pygame.event.get():
@@ -341,20 +355,20 @@ def play_vs_ai():
     promotion_dialog = False
     promotion_from = None
     promotion_to = None
+    promotion_dialog_just_activated = False
     ai_thinking = False
     move_queue = queue.Queue()
     ai_thread = None
-    ai_stats = {}  # To store AI statistics
+    ai_stats = {}
 
     def get_ai_move():
         print("AI is thinking...")
-        start_time = time.time()  # Start timing
+        start_time = time.time()
         engine.set_position(game.board.fen())
         result = engine.get_best_move_with_stats()
-        end_time = time.time()  # End timing
+        end_time = time.time()
         time_taken = end_time - start_time
         print("Move from engine:", result["move"])
-        # Update AI stats with values from engine
         ai_stats.update({
             "depth": result.get("depth", "-"),
             "score": result.get("score", -60),
@@ -374,27 +388,73 @@ def play_vs_ai():
         btn_undo, btn_help, btn_back = draw_console(game, is_ai_mode=True, ai_stats=ai_stats, mouse_pos=mouse_pos, ai_thinking=ai_thinking)
         draw_move_hints(game, game.selected_square, flipped=flipped)
         draw_suggested_move(suggested_move, flipped=flipped)
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
+                print(f"Nhấp chuột tại tọa độ: {event.pos}")
                 if promotion_dialog:
+                    print(f"Xử lý sự kiện phong quân: promotion_from={chess.square_name(promotion_from) if promotion_from is not None else 'None'}, promotion_to={chess.square_name(promotion_to) if promotion_to is not None else 'None'}")
+                    print(f"Trạng thái bàn cờ trước khi phong quân: {game.board.fen()}")
                     if btn_queen.collidepoint(event.pos):
-                        game.move(promotion_from, promotion_to, promotion=chess.QUEEN)
-                        promotion_dialog = False
-                        handle_move_outcome(game)
+                        print(f"Nhấp vào nút Queen, tọa độ: {event.pos}")
+                        move_result = game.move(promotion_from, promotion_to, promotion=chess.QUEEN)
+                        print(f"Kết quả phong quân QUEEN: {move_result}")
+                        if move_result["valid"]:
+                            promotion_dialog = False
+                            promotion_dialog_just_activated = False
+                            suggested_move = None
+                            target_piece = game.get_piece(promotion_to)
+                            handle_move_outcome(game, target_piece, is_ai_mode=True, player_color=player_color)
+                            print(f"After promotion - History: {[m.uci() for m in game.move_history]}")
+                            print(f"After promotion - FEN: {game.board.fen()}")
+                        else:
+                            print(f"Phong quân thất bại: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}, QUEEN")
                     elif btn_rook.collidepoint(event.pos):
-                        game.move(promotion_from, promotion_to, promotion=chess.ROOK)
-                        promotion_dialog = False
-                        handle_move_outcome(game)
+                        print(f"Nhấp vào nút Rook, tọa độ: {event.pos}")
+                        move_result = game.move(promotion_from, promotion_to, promotion=chess.ROOK)
+                        print(f"Kết quả phong quân ROOK: {move_result}")
+                        if move_result["valid"]:
+                            promotion_dialog = False
+                            promotion_dialog_just_activated = False
+                            suggested_move = None
+                            target_piece = game.get_piece(promotion_to)
+                            handle_move_outcome(game, target_piece, is_ai_mode=True, player_color=player_color)
+                            print(f"After promotion - History: {[m.uci() for m in game.move_history]}")
+                            print(f"After promotion - FEN: {game.board.fen()}")
+                        else:
+                            print(f"Phong quân thất bại: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}, ROOK")
                     elif btn_bishop.collidepoint(event.pos):
-                        game.move(promotion_from, promotion_to, promotion=chess.BISHOP)
-                        promotion_dialog = False
-                        handle_move_outcome(game)
+                        print(f"Nhấp vào nút Bishop, tọa độ: {event.pos}")
+                        move_result = game.move(promotion_from, promotion_to, promotion=chess.BISHOP)
+                        print(f"Kết quả phong quân BISHOP: {move_result}")
+                        if move_result["valid"]:
+                            promotion_dialog = False
+                            promotion_dialog_just_activated = False
+                            suggested_move = None
+                            target_piece = game.get_piece(promotion_to)
+                            handle_move_outcome(game, target_piece, is_ai_mode=True, player_color=player_color)
+                            print(f"After promotion - History: {[m.uci() for m in game.move_history]}")
+                            print(f"After promotion - FEN: {game.board.fen()}")
+                        else:
+                            print(f"Phong quân thất bại: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}, BISHOP")
                     elif btn_knight.collidepoint(event.pos):
-                        game.move(promotion_from, promotion_to, promotion=chess.KNIGHT)
-                        promotion_dialog = False
-                        handle_move_outcome(game)
+                        print(f"Nhấp vào nút Knight, tọa độ: {event.pos}")
+                        move_result = game.move(promotion_from, promotion_to, promotion=chess.KNIGHT)
+                        print(f"Kết quả phong quân KNIGHT: {move_result}")
+                        if move_result["valid"]:
+                            promotion_dialog = False
+                            promotion_dialog_just_activated = False
+                            suggested_move = None
+                            target_piece = game.get_piece(promotion_to)
+                            handle_move_outcome(game, target_piece, is_ai_mode=True, player_color=player_color)
+                            print(f"After promotion - History: {[m.uci() for m in game.move_history]}")
+                            print(f"After promotion - FEN: {game.board.fen()}")
+                        else:
+                            print(f"Phong quân thất bại: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}, KNIGHT")
+                    else:
+                        print(f"Nhấp chuột ngoài các nút phong quân, tọa độ: {event.pos}")
                 else:
                     if btn_undo.collidepoint(event.pos):
                         if len(game.board.move_stack) >= 2:
@@ -402,10 +462,12 @@ def play_vs_ai():
                             game.undo()
                         elif len(game.board.move_stack) == 1:
                             game.undo()
+                        game.selected_square = None  # Reset selected_square after undo
                         suggested_move = None
                         ai_thinking = False
                         move_queue = queue.Queue()
-                        ai_stats.clear()  # Clear AI stats on undo
+                        ai_stats.clear()
+                        print("Đã hoàn tác nước đi, đặt lại selected_square về None")
                     elif btn_help.collidepoint(event.pos):
                         if game.board.turn == player_color:
                             engine.set_position(game.board.fen())
@@ -429,42 +491,69 @@ def play_vs_ai():
                         ai_thinking = False
                         move_queue = queue.Queue()
                     else:
-                        if game.board.turn == player_color:
-                            square = get_square_from_mouse(event.pos, flipped=flipped)
-                            if square is None:
-                                continue
-                            piece = game.get_piece(square)
-                            if game.selected_square is not None:
-                                piece = game.get_piece(game.selected_square)
-                                target_piece = game.get_piece(square)
-                                print(f"Before move - FEN: {game.board.fen()}")
-                                move_result = game.move(game.selected_square, square)
-                                if move_result["valid"]:
-                                    if move_result["promotion_required"]:
-                                        promotion_dialog = True
-                                        promotion_from = game.selected_square
-                                        promotion_to = square
-                                    else:
+                        square = get_square_from_mouse(event.pos, flipped=flipped)
+                        if square is None:
+                            print(f"Nhấp chuột ngoài bàn cờ: {event.pos}")
+                            continue
+                        
+                        # If a square is already selected, attempt to move
+                        if game.selected_square is not None:
+                            print(f"Ô nguồn đã chọn: {chess.square_name(game.selected_square)}")
+                            print(f"Ô đích được chọn: {chess.square_name(square)}")
+                            print(f"Thử nước đi: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                            print(f"Before move - FEN: {game.board.fen()}")
+                            # Check if the move is legal by matching from_square and to_square
+                            legal_moves = list(game.board.legal_moves)
+                            promotion_required = False
+                            move_is_legal = False
+                            for legal_move in legal_moves:
+                                if (legal_move.from_square == game.selected_square and
+                                    legal_move.to_square == square):
+                                    move_is_legal = True
+                                    if legal_move.promotion is not None:
+                                        promotion_required = True
+                                    break
+                            
+                            if move_is_legal:
+                                if promotion_required:
+                                    promotion_dialog = True
+                                    promotion_dialog_just_activated = True
+                                    promotion_from = game.selected_square
+                                    promotion_to = square
+                                    print(f"Promotion dialog activated: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}")
+                                    game.selected_square = None
+                                else:
+                                    move_result = game.move(game.selected_square, square)
+                                    print(f"Kết quả nước đi: {move_result}")
+                                    if move_result["valid"]:
                                         suggested_move = None
-                                        handle_move_outcome(game, target_piece)
+                                        target_piece = game.get_piece(square)
+                                        handle_move_outcome(game, target_piece, is_ai_mode=True, player_color=player_color)
                                         print(f"After player's move - History: {[m.uci() for m in game.move_history]}")
                                         print(f"After player's move - FEN: {game.board.fen()}")
-                                else:
-                                    print(f"Invalid move: from {chess.square_name(game.selected_square)} to {chess.square_name(square)}")
-                                    game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
+                                    game.selected_square = None
                             else:
-                                piece = game.get_piece(square)
-                                game.selected_square = square if piece and piece.color == game.board.turn else None
-                                print(f"Selected source square: {square} ({chess.square_name(square)}), piece: {piece}")
+                                print(f"Invalid move: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                                game.selected_square = None  # Reset selected_square on invalid move
+                            print(f"Trạng thái promotion_dialog sau khi xử lý: {promotion_dialog}")
                         else:
-                            print(f"Not your turn. Current turn: {'BLACK' if game.board.turn == chess.BLACK else 'WHITE'}")
-                            print(f"Board state FEN: {game.board.fen()}")
+                            # Select a new square if none is selected
+                            piece = game.get_piece(square)
+                            if piece and piece.color == game.board.turn:
+                                game.selected_square = square
+                                print(f"Selected source square: {square} ({chess.square_name(square)}), piece: {piece}")
+                            else:
+                                print(f"Không chọn ô nguồn: Ô {chess.square_name(square)} không có quân hợp lệ")
+                                game.selected_square = None
+                        print(f"Trạng thái selected_square sau khi xử lý: {chess.square_name(game.selected_square) if game.selected_square is not None else 'None'}")
+        
         if game.board.turn != player_color and not promotion_dialog and not ai_thinking:
             print("AI's turn. Turn:", "Black" if game.board.turn == chess.BLACK else "White")
             print("FEN sent to engine:", game.board.fen())
             ai_thinking = True
             ai_thread = threading.Thread(target=get_ai_move)
             ai_thread.start()
+        
         if ai_thinking and not move_queue.empty():
             uci_move = move_queue.get()
             ai_thinking = False
@@ -483,7 +572,7 @@ def play_vs_ai():
                 move_result = game.move(from_square, to_square, promotion=promotion)
                 if move_result["valid"]:
                     target_piece = game.get_piece(to_square)
-                    handle_move_outcome(game, target_piece)
+                    handle_move_outcome(game, target_piece, is_ai_mode=True, player_color=player_color)
                     print(f"After AI's move - History: {[m.uci() for m in game.move_history]}")
                     print(f"After AI's move - FEN: {game.board.fen()}")
                 else:
@@ -491,8 +580,10 @@ def play_vs_ai():
             else:
                 print("Engine did not return a valid move.")
                 if game.board.is_checkmate():
-                    winner = "AI" if game.board.turn != player_color else "You"
-                    notification(game, f"Checkmate! {winner} wins.")
+                    winner = "You" if game.board.turn != player_color else "AI"
+                    winner_color = WHITE if game.board.turn != player_color else BLACK
+                    outline = WHITE if winner_color == BLACK else None
+                    notification(game, f"{winner} Wins!", color=winner_color, is_victory=True, outline_color=outline)
                 elif game.board.is_stalemate():
                     notification(game, "Stalemate!")
                 elif game.board.is_insufficient_material():
@@ -501,16 +592,45 @@ def play_vs_ai():
                     notification(game, "No valid moves. Game over.")
                 game.board.reset()
                 game.move_history.clear()
-                ai_stats.clear()  # Clear AI stats on game end
+                ai_stats.clear()
+        
+        if promotion_dialog:
+            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 150))
+            screen.blit(overlay, (0, 0))
+            draw_text("Choose Promotion", WIDTH // 2, HEIGHT // 2 - 180, FONT, True, (255, 255, 255))
+            btn_queen = draw_button("Queen", WIDTH // 2 - 75, HEIGHT // 2 - 120, 150, 50, (50, 50, 200), (100, 100, 255), mouse_pos, border=True)
+            btn_rook = draw_button("Rook", WIDTH // 2 - 75, HEIGHT // 2 - 60, 150, 50, (50, 50, 200), (100, 100, 255), mouse_pos, border=True)
+            btn_bishop = draw_button("Bishop", WIDTH // 2 - 75, HEIGHT // 2, 150, 50, (50, 50, 200), (100, 100, 255), mouse_pos, border=True)
+            btn_knight = draw_button("Knight", WIDTH // 2 - 75, HEIGHT // 2 + 60, 150, 50, (50, 50, 200), (100, 100, 255), mouse_pos, border=True)
+            if promotion_dialog_just_activated:
+                print("Vẽ hộp thoại phong quân")
+                print(f"Vị trí nút Queen: {btn_queen}")
+                print(f"Vị trí nút Rook: {btn_rook}")
+                print(f"Vị trí nút Bishop: {btn_bishop}")
+                print(f"Vị trí nút Knight: {btn_knight}")
+                promotion_dialog_just_activated = False
+        
         pygame.display.flip()
+    
     if ai_thread and ai_thread.is_alive():
         ai_thread.join()
 
-def handle_move_outcome(game, target_piece=None):
+def handle_move_outcome(game, target_piece=None, is_ai_mode=False, player_color=None):
     if game.board.is_checkmate():
         checkmate_sound.play()
-        winner = "White" if game.board.turn == chess.BLACK else "Black"
-        notification(game, f"Checkmate! {winner} wins!")
+        if is_ai_mode:
+            # In AI mode, determine if the player or AI wins
+            winner = "You" if game.board.turn != player_color else "AI"
+            winner_color = WHITE if game.board.turn != player_color else BLACK
+            outline = WHITE if winner_color == BLACK else None
+            notification(game, f"{winner} Wins!", color=winner_color, is_victory=True, outline_color=outline)
+        else:
+            # In 1v1 mode, determine if White or Black wins
+            winner = "White" if game.board.turn == chess.BLACK else "Black"
+            winner_color = WHITE if winner == "White" else BLACK
+            outline = WHITE if winner_color == BLACK else None
+            notification(game, f"{winner} Wins!", color=winner_color, is_victory=True, outline_color=outline)
     elif game.board.is_stalemate():
         notification(game, "Stalemate!")
     elif game.board.is_insufficient_material():
@@ -535,6 +655,7 @@ def play_1vs1():
     promotion_dialog = False
     promotion_from = None
     promotion_to = None
+    promotion_dialog_just_activated = False
     while running:
         flipped = game.board.turn == chess.BLACK
         screen.fill((0, 0, 0))
@@ -549,31 +670,74 @@ def play_1vs1():
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
+                print(f"Nhấp chuột tại tọa độ: {event.pos}")
                 if promotion_dialog:
+                    print(f"Xử lý sự kiện phong quân: promotion_from={chess.square_name(promotion_from) if promotion_from is not None else 'None'}, promotion_to={chess.square_name(promotion_to) if promotion_to is not None else 'None'}")
+                    print(f"Trạng thái bàn cờ trước khi phong quân: {game.board.fen()}")
                     if btn_queen.collidepoint(event.pos):
-                        game.move(promotion_from, promotion_to, promotion=chess.QUEEN)
-                        promotion_dialog = False
-                        suggested_move = None
-                        handle_move_outcome(game)
+                        print(f"Nhấp vào nút Queen, tọa độ: {event.pos}")
+                        move_result = game.move(promotion_from, promotion_to, promotion=chess.QUEEN)
+                        print(f"Kết quả phong quân QUEEN: {move_result}")
+                        if move_result["valid"]:
+                            promotion_dialog = False
+                            promotion_dialog_just_activated = False
+                            suggested_move = None
+                            target_piece = game.get_piece(promotion_to)
+                            handle_move_outcome(game, target_piece, is_ai_mode=False)
+                            print(f"After promotion - History: {[m.uci() for m in game.move_history]}")
+                            print(f"After promotion - FEN: {game.board.fen()}")
+                        else:
+                            print(f"Phong quân thất bại: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}, QUEEN")
                     elif btn_rook.collidepoint(event.pos):
-                        game.move(promotion_from, promotion_to, promotion=chess.ROOK)
-                        promotion_dialog = False
-                        suggested_move = None
-                        handle_move_outcome(game)
+                        print(f"Nhấp vào nút Rook, tọa độ: {event.pos}")
+                        move_result = game.move(promotion_from, promotion_to, promotion=chess.ROOK)
+                        print(f"Kết quả phong quân ROOK: {move_result}")
+                        if move_result["valid"]:
+                            promotion_dialog = False
+                            promotion_dialog_just_activated = False
+                            suggested_move = None
+                            target_piece = game.get_piece(promotion_to)
+                            handle_move_outcome(game, target_piece, is_ai_mode=False)
+                            print(f"After promotion - History: {[m.uci() for m in game.move_history]}")
+                            print(f"After promotion - FEN: {game.board.fen()}")
+                        else:
+                            print(f"Phong quân thất bại: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}, ROOK")
                     elif btn_bishop.collidepoint(event.pos):
-                        game.move(promotion_from, promotion_to, promotion=chess.BISHOP)
-                        promotion_dialog = False
-                        suggested_move = None
-                        handle_move_outcome(game)
+                        print(f"Nhấp vào nút Bishop, tọa độ: {event.pos}")
+                        move_result = game.move(promotion_from, promotion_to, promotion=chess.BISHOP)
+                        print(f"Kết quả phong quân BISHOP: {move_result}")
+                        if move_result["valid"]:
+                            promotion_dialog = False
+                            promotion_dialog_just_activated = False
+                            suggested_move = None
+                            target_piece = game.get_piece(promotion_to)
+                            handle_move_outcome(game, target_piece, is_ai_mode=False)
+                            print(f"After promotion - History: {[m.uci() for m in game.move_history]}")
+                            print(f"After promotion - FEN: {game.board.fen()}")
+                        else:
+                            print(f"Phong quân thất bại: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}, BISHOP")
                     elif btn_knight.collidepoint(event.pos):
-                        game.move(promotion_from, promotion_to, promotion=chess.KNIGHT)
-                        promotion_dialog = False
-                        suggested_move = None
-                        handle_move_outcome(game)
+                        print(f"Nhấp vào nút Knight, tọa độ: {event.pos}")
+                        move_result = game.move(promotion_from, promotion_to, promotion=chess.KNIGHT)
+                        print(f"Kết quả phong quân KNIGHT: {move_result}")
+                        if move_result["valid"]:
+                            promotion_dialog = False
+                            promotion_dialog_just_activated = False
+                            suggested_move = None
+                            target_piece = game.get_piece(promotion_to)
+                            handle_move_outcome(game, target_piece, is_ai_mode=False)
+                            print(f"After promotion - History: {[m.uci() for m in game.move_history]}")
+                            print(f"After promotion - FEN: {game.board.fen()}")
+                        else:
+                            print(f"Phong quân thất bại: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}, KNIGHT")
+                    else:
+                        print(f"Nhấp chuột ngoài các nút phong quân, tọa độ: {event.pos}")
                 else:
                     if btn_undo.collidepoint(event.pos):
                         game.undo()
+                        game.selected_square = None  # Reset selected_square after undo
                         suggested_move = None
+                        print("Đã hoàn tác nước đi, đặt lại selected_square về None")
                     elif btn_help.collidepoint(event.pos):
                         engine.set_position(game.board.fen())
                         result = engine.get_best_move_with_stats()
@@ -596,48 +760,86 @@ def play_1vs1():
                     else:
                         square = get_square_from_mouse(event.pos, flipped=flipped)
                         if square is None:
+                            print(f"Nhấp chuột ngoài bàn cờ: {event.pos}")
                             continue
-                        piece = game.get_piece(square)
+                        # If a square is already selected, attempt to move
                         if game.selected_square is not None:
-                            piece = game.get_piece(game.selected_square)
-                            target_piece = game.get_piece(square)
-                            move_result = game.move(game.selected_square, square)
-                            if move_result["valid"]:
-                                if move_result["promotion_required"]:
+                            print(f"Ô nguồn đã chọn: {chess.square_name(game.selected_square)}")
+                            print(f"Ô đích được chọn: {chess.square_name(square)}")
+                            print(f"Thử nước đi: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                            print(f"Before move - FEN: {game.board.fen()}")
+                            # Check if the move is legal by matching from_square and to_square
+                            legal_moves = list(game.board.legal_moves)
+                            promotion_required = False
+                            move_is_legal = False
+                            for legal_move in legal_moves:
+                                if (legal_move.from_square == game.selected_square and
+                                    legal_move.to_square == square):
+                                    move_is_legal = True
+                                    if legal_move.promotion is not None:
+                                        promotion_required = True
+                                    break
+                            
+                            if move_is_legal:
+                                if promotion_required:
                                     promotion_dialog = True
+                                    promotion_dialog_just_activated = True
                                     promotion_from = game.selected_square
                                     promotion_to = square
+                                    print(f"Promotion dialog activated: từ {chess.square_name(promotion_from)} đến {chess.square_name(promotion_to)}")
+                                    game.selected_square = None
                                 else:
-                                    suggested_move = None
-                                    handle_move_outcome(game, target_piece)
+                                    move_result = game.move(game.selected_square, square)
+                                    print(f"Kết quả nước đi: {move_result}")
+                                    if move_result["valid"]:
+                                        suggested_move = None
+                                        target_piece = game.get_piece(square)
+                                        handle_move_outcome(game, target_piece, is_ai_mode=False)
+                                        print(f"After move - History: {[m.uci() for m in game.move_history]}")
+                                        print(f"After move - FEN: {game.board.fen()}")
+                                    game.selected_square = None
                             else:
-                                print(f"Invalid move: from {chess.square_name(game.selected_square)} to {chess.square_name(square)}")
-                                game.selected_square = square if game.get_piece(square) and game.get_piece(square).color == game.board.turn else None
+                                print(f"Invalid move: từ {chess.square_name(game.selected_square)} đến {chess.square_name(square)}")
+                                game.selected_square = None  # Reset selected_square on invalid move
+                            print(f"Trạng thái promotion_dialog sau khi xử lý: {promotion_dialog}")
                         else:
+                            # Select a new square if none is selected
                             piece = game.get_piece(square)
-                            game.selected_square = square if piece and piece.color == game.board.turn else None
-                            print(f"Selected source square: {square} ({chess.square_name(square)}), piece: {piece}")
+                            if piece and piece.color == game.board.turn:
+                                game.selected_square = square
+                                print(f"Selected source square: {square} ({chess.square_name(square)}), piece: {piece}")
+                            else:
+                                print(f"Không chọn ô nguồn: Ô {chess.square_name(square)} không có quân hợp lệ")
+                                game.selected_square = None
+                        print(f"Trạng thái selected_square sau khi xử lý: {chess.square_name(game.selected_square) if game.selected_square is not None else 'None'}")
         if promotion_dialog:
             overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 150))
             screen.blit(overlay, (0, 0))
-            draw_text("Choose", WIDTH // 2, HEIGHT // 2 - 150, FONT, True, (255, 255, 255))
-            btn_queen = draw_button("Queen", WIDTH // 2 - 50, HEIGHT // 2 - 100, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-            btn_rook = draw_button("Rook", WIDTH // 2 - 50, HEIGHT // 2 - 40, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-            btn_bishop = draw_button("Bishop", WIDTH // 2 - 50, HEIGHT // 2 + 20, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
-            btn_knight = draw_button("Knight", WIDTH // 2 - 50, HEIGHT // 2 + 80, 100, 40, (50, 50, 200), (100, 100, 255), mouse_pos)
+            draw_text("Choose Promotion", WIDTH // 2, HEIGHT // 2 - 180, FONT, True, (255, 255, 255))
+            btn_queen = draw_button("Queen", WIDTH // 2 - 75, HEIGHT // 2 - 120, 150, 50, (50, 50, 200), (100, 100, 255), mouse_pos, border=True)
+            btn_rook = draw_button("Rook", WIDTH // 2 - 75, HEIGHT // 2 - 60, 150, 50, (50, 50, 200), (100, 100, 255), mouse_pos, border=True)
+            btn_bishop = draw_button("Bishop", WIDTH // 2 - 75, HEIGHT // 2, 150, 50, (50, 50, 200), (100, 100, 255), mouse_pos, border=True)
+            btn_knight = draw_button("Knight", WIDTH // 2 - 75, HEIGHT // 2 + 60, 150, 50, (50, 50, 200), (100, 100, 255), mouse_pos, border=True)
+            if promotion_dialog_just_activated:
+                print("Vẽ hộp thoại phong quân")
+                print(f"Vị trí nút Queen: {btn_queen}")
+                print(f"Vị trí nút Rook: {btn_rook}")
+                print(f"Vị trí nút Bishop: {btn_bishop}")
+                print(f"Vị trí nút Knight: {btn_knight}")
+                promotion_dialog_just_activated = False
         pygame.display.flip()
 
 def main_menu():
     running = True
     while running:
         screen.blit(menu_background, (0, 0))
-        title = TITLE_FONT.render("Chess Game", True, BLACK)  # Use larger font for title
+        title = TITLE_FONT.render("Chess Game", True, BLACK)
         screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 80))
-        btn_1v1 = draw_text("Play 1 vs 1", WIDTH // 2, 250)  # Moved down
-        btn_vs_ai = draw_text("Play vs AI", WIDTH // 2, 320)  # Moved down
-        btn_music = draw_text("Music", WIDTH // 2, 390)  # Moved down
-        btn_quit = draw_text("Exit", WIDTH // 2, 460)  # Moved down
+        btn_1v1 = draw_text("Play 1 vs 1", WIDTH // 2, 250)
+        btn_vs_ai = draw_text("Play vs AI", WIDTH // 2, 320)
+        btn_music = draw_text("Music", WIDTH // 2, 390)
+        btn_quit = draw_text("Exit", WIDTH // 2, 460)
         mouse_x, mouse_y = pygame.mouse.get_pos()
         if btn_1v1.collidepoint(mouse_x, mouse_y):
             draw_text("Play 1 vs 1", WIDTH // 2, 250, color=HOVER_COLOR)
@@ -703,7 +905,7 @@ def toggle_music():
         pygame.draw.rect(screen, (100, 100, 100), fill_rect)
         handle_x = slider_min + fill_width
         handle_y = slider_rect.y + slider_rect.height // 2
-        pygame.draw.circle(screen, (0, 128, 0), (handle_x, handle_y), handle_radius)  # Dark green handle
+        pygame.draw.circle(screen, (0, 128, 0), (handle_x, handle_y), handle_radius)
         back_rect = pygame.Rect(WIDTH//2 - 50, slider_rect.y + slider_rect.height + 40, 100, 40)
         pygame.draw.rect(screen, HOVER_COLOR, back_rect)
         back_text = FONT.render("Back", True, WHITE)
