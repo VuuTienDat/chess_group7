@@ -91,10 +91,20 @@ class Engine:
 
             # Lấy thông tin thống kê từ engine (nếu có)
             info = result.info if hasattr(result, "info") else {}
+            # Xử lý điểm số an toàn
+            score_value = "-"
+            score = info.get("score", chess.engine.PovScore(chess.engine.Cp(-60), self.board.turn)).relative
+            if isinstance(score, chess.engine.Mate):
+                score_value = f"mate {score.mate()}"
+            elif isinstance(score, chess.engine.Cp):
+                score_value = score.cp
+            else:
+                score_value = str(score)
+
             stats = {
                 "move": move.uci(),
                 "depth": info.get("depth", 4),
-                "score": info.get("score", chess.engine.PovScore(chess.engine.Cp(-60), self.board.turn)).relative.cp,
+                "score": score_value,
                 "nodes": info.get("nodes", 390061),
                 "cutoffs": info.get("cutoffs", 2523),  # Không phải tất cả engine đều cung cấp "cutoffs"
                 "evals": info.get("pv", 35828),  # pv có thể được dùng để đếm số lần đánh giá
