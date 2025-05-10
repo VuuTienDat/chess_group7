@@ -1,5 +1,6 @@
 import pygame
 import chess
+import chess.pgn
 from chess_game import ChessGame
 import sys
 import os
@@ -7,11 +8,11 @@ import time
 from stockfish import Stockfish
 import math
 
-# Assuming Engine is in the Engine directory
+# Đường dẫn tới Engine
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Engine"))
 from Engine.engine import Engine
 
-# Handle resource paths for bundled executable
+# Xử lý đường dẫn tài nguyên
 if getattr(sys, 'frozen', False):
     bundle_dir = sys._MEIPASS
 else:
@@ -21,31 +22,32 @@ music_path = os.path.join(bundle_dir, "Music")
 image_path = os.path.join(bundle_dir, "Image")
 font_path = os.path.join(bundle_dir, "Font")
 
-# Window dimensions
+# Kích thước cửa sổ
 WIDTH, HEIGHT = 840, 640
-BOARD_WIDTH = 640
+BOARD_WIDTH = 300
 CONSOLE_WIDTH = 200
 SQUARE_SIZE = BOARD_WIDTH // 8
+MARGIN = 10
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Bot vs Stockfish")
+pygame.display.set_caption("Bot vs Stockfish - 4 Games")
 pygame.mixer.init()
 
-# Load music and sounds with volume set to 0
+# Tải nhạc và âm thanh (âm lượng = 0)
 pygame.mixer.music.load(os.path.join(music_path, "chessmusic.mp3"))
-pygame.mixer.music.set_volume(0.0)  # Set music volume to 0
+pygame.mixer.music.set_volume(0.0)
 pygame.mixer.music.play(-1)
 move_sound = pygame.mixer.Sound(os.path.join(music_path, "Move.mp3"))
-move_sound.set_volume(0.0)  # Set move sound volume to 0
+move_sound.set_volume(0.0)
 capture_sound = pygame.mixer.Sound(os.path.join(music_path, "Capture.mp3"))
-capture_sound.set_volume(0.0)  # Set capture sound volume to 0
+capture_sound.set_volume(0.0)
 check_sound = pygame.mixer.Sound(os.path.join(music_path, "Check.mp3"))
-check_sound.set_volume(0.0)  # Set check sound volume to 0
+check_sound.set_volume(0.0)
 checkmate_sound = pygame.mixer.Sound(os.path.join(music_path, "Checkmate.mp3"))
-checkmate_sound.set_volume(0.0)  # Set checkmate sound volume to 0
+checkmate_sound.set_volume(0.0)
 
-# Board and piece setup
+# Thiết lập bàn cờ và quân cờ
 board_colors = [(255, 255, 255), (0, 100, 0)]
 images = {}
 pieces = ["P", "N", "B", "R", "Q", "K"]
@@ -56,18 +58,20 @@ for color in ["w", "b"]:
             pygame.image.load(os.path.join(image_path, f"{name}.png")), (SQUARE_SIZE, SQUARE_SIZE)
         )
 
-# Fonts
+# Font chữ
 FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 40)
-VICTORY_FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 120)
+VICTORY_FONT = pygame.font.Font(os.path.join(font_path, "turok.ttf"), 30)
 CONSOLE_FONT = pygame.font.SysFont('arial', 16)
-BOARD_LABEL_FONT = pygame.font.SysFont('arial', 14)
+BOARD_LABEL_FONT = pygame.font.SysFont('arial', 12)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 CONSOLE_BG = (50, 50, 50)
 LABEL_COLOR = (0, 0, 0)
 HIGHLIGHT_COLOR = (100, 149, 237, 128)
+BORDER_COLOR = (150, 150, 150)
+MESSAGE_BG = (0, 0, 0, 180)
 
-# Load background
+# Tải background
 menu_background = pygame.image.load(os.path.join(image_path, "landscape3.jpg"))
 menu_background = pygame.transform.scale(menu_background, (WIDTH, HEIGHT))
 
@@ -88,127 +92,81 @@ def draw_text(text, x, y, font=FONT, center=True, color=BLACK, outline_color=Non
     screen.blit(label, rect)
     return rect
 
-def draw_board():
-    screen.blit(menu_background, (0, 0), (0, 0, BOARD_WIDTH, HEIGHT))
-    pygame.draw.rect(screen, CONSOLE_BG, (BOARD_WIDTH, 0, CONSOLE_WIDTH, HEIGHT))
+def draw_board(x_offset, y_offset, game_num, game, message=""):
+    pygame.draw.rect(screen, BORDER_COLOR,
+                     (x_offset - 2, y_offset - 2, BOARD_WIDTH + 4, BOARD_WIDTH + 4))
     for row in range(8):
         for col in range(8):
             color = board_colors[(row + col) % 2]
             pygame.draw.rect(screen, color,
-                            (col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
+                             (x_offset + col * SQUARE_SIZE, y_offset + row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
     files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
     ranks = ['8', '7', '6', '5', '4', '3', '2', '1']
     for col in range(8):
         label = BOARD_LABEL_FONT.render(files[col], True, LABEL_COLOR)
-        screen.blit(label, (col * SQUARE_SIZE + 2, (7 * SQUARE_SIZE) + SQUARE_SIZE - 20))
+        screen.blit(label, (x_offset + col * SQUARE_SIZE + 2, y_offset + (7 * SQUARE_SIZE) + SQUARE_SIZE - 15))
     for row in range(8):
         label = BOARD_LABEL_FONT.render(ranks[row], True, LABEL_COLOR)
-        screen.blit(label, (2, row * SQUARE_SIZE + 2))
+        screen.blit(label, (x_offset + 2, y_offset + row * SQUARE_SIZE + 2))
+    draw_text(f"Game {game_num + 1}", x_offset + BOARD_WIDTH // 2, y_offset + 10, font=CONSOLE_FONT, color=WHITE)
 
-def draw_pieces(game):
+    if message:
+        message_surface = pygame.Surface((BOARD_WIDTH - 20, 60), pygame.SRCALPHA)
+        message_surface.fill(MESSAGE_BG)
+        screen.blit(message_surface, (x_offset + 10, y_offset + BOARD_WIDTH // 2 - 30))
+        color = WHITE if "Bot Wins" in message else BLACK if "Stockfish Wins" in message else WHITE
+        outline = WHITE if color == BLACK else None
+        draw_text(message, x_offset + BOARD_WIDTH // 2, y_offset + BOARD_WIDTH // 2,
+                  font=VICTORY_FONT, color=color, outline_color=outline)
+
+def draw_pieces(game, x_offset, y_offset):
     for square in chess.SQUARES:
         piece = game.get_piece(square)
         if piece:
             col = chess.square_file(square)
             row = 7 - chess.square_rank(square)
             name = ('w' if piece.color == chess.WHITE else 'b') + piece.symbol().upper()
-            screen.blit(images[name], (col * SQUARE_SIZE, row * SQUARE_SIZE))
+            screen.blit(images[name], (x_offset + col * SQUARE_SIZE, y_offset + row * SQUARE_SIZE))
 
-def draw_console(game, bot_stats=None, stockfish_stats=None, mouse_pos=(0, 0), bot_color=chess.WHITE):
-    pygame.draw.rect(screen, CONSOLE_BG, (BOARD_WIDTH, 0, CONSOLE_WIDTH, HEIGHT))
-    panel_height = HEIGHT // 2
-    TITLE_COLOR = (255, 215, 0)
+def draw_console(games, bot_stats_list, stockfish_stats_list, mouse_pos, bot_colors):
+    pygame.draw.rect(screen, CONSOLE_BG, (2 * BOARD_WIDTH + 2 * MARGIN, 0, CONSOLE_WIDTH, HEIGHT))
+    y_offset = 10
+    for i, game in enumerate(games):
+        title = CONSOLE_FONT.render(f"Game {i + 1}", True, (255, 215, 0))
+        screen.blit(title, (2 * BOARD_WIDTH + 2 * MARGIN + 10, y_offset))
+        y_offset += 25
 
-    # Panel Game
-    title = CONSOLE_FONT.render("Panel Game", True, TITLE_COLOR)
-    title_rect = title.get_rect(center=(BOARD_WIDTH + CONSOLE_WIDTH // 2, 10 + title.get_height() // 2))
-    screen.blit(title, title_rect)
+        turn = "White" if game.board.turn == chess.WHITE else "Black"
+        turn_color = WHITE if turn == "White" else (150, 150, 150)
+        turn_label = CONSOLE_FONT.render("Turn: ", True, WHITE)
+        turn_value = CONSOLE_FONT.render(turn, True, turn_color)
+        screen.blit(turn_label, (2 * BOARD_WIDTH + 2 * MARGIN + 10, y_offset))
+        screen.blit(turn_value, (2 * BOARD_WIDTH + 2 * MARGIN + 10 + turn_label.get_width(), y_offset))
 
-    y_offset = 40
-    turn = "WHITE" if game.board.turn == chess.WHITE else "BLACK"
-    WHITE_TURN_COLOR = (255, 255, 255)
-    BLACK_TURN_COLOR = (150, 150, 150)
-    turn_color = WHITE_TURN_COLOR if turn == "WHITE" else BLACK_TURN_COLOR
-    turn_label = CONSOLE_FONT.render("Turn: ", True, WHITE)
-    turn_value = CONSOLE_FONT.render(turn, True, turn_color)
-    screen.blit(turn_label, (BOARD_WIDTH + 10, y_offset))
-    turn_label_width = turn_label.get_width()
-    screen.blit(turn_value, (BOARD_WIDTH + 10 + turn_label_width, y_offset))
-
-    y_offset += 25
-    possible_moves = len(list(game.board.legal_moves))
-    draw_text(f"Possible moves: {possible_moves}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-
-    y_offset += 25
-    in_check = game.board.is_check()
-    draw_text(f"In Check: {in_check}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-
-    y_offset += 25
-    bot_label = CONSOLE_FONT.render(f"Bot ({'White' if bot_color == chess.WHITE else 'Black'})", True, WHITE)
-    stockfish_label = CONSOLE_FONT.render(f"Stockfish ({'Black' if bot_color == chess.WHITE else 'White'})", True, WHITE)
-    screen.blit(bot_label, (BOARD_WIDTH + 10, y_offset))
-    stockfish_label_width = stockfish_label.get_width()
-    screen.blit(stockfish_label, (BOARD_WIDTH + CONSOLE_WIDTH - stockfish_label_width - 10, y_offset))
-
-    y_offset += 25
-    moves = [move.uci() for move in game.move_history]
-    paired_moves = []
-    for i in range(0, len(moves), 2):
-        white_move = moves[i]
-        black_move = moves[i + 1] if i + 1 < len(moves) else ""
-        paired_moves.append((white_move, black_move))
-    max_moves = (panel_height - y_offset - 10) // 20
-    start_index = max(0, len(paired_moves) - max_moves)
-    for white_move, black_move in paired_moves[start_index:]:
-        white_move_label = CONSOLE_FONT.render(white_move, True, WHITE)
-        black_move_label = CONSOLE_FONT.render(black_move, True, WHITE) if black_move else None
-        screen.blit(white_move_label, (BOARD_WIDTH + 10, y_offset))
-        if black_move_label:
-            black_move_width = black_move_label.get_width()
-            screen.blit(black_move_label, (BOARD_WIDTH + CONSOLE_WIDTH - black_move_width - 10, y_offset))
         y_offset += 20
+        possible_moves = len(list(game.board.legal_moves))
+        draw_text(f"Moves: {possible_moves}", 2 * BOARD_WIDTH + 2 * MARGIN + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
-    total_moves = len(paired_moves)
-    draw_text(f"Total moves: {total_moves}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+        y_offset += 20
+        in_check = game.board.is_check()
+        draw_text(f"Check: {in_check}", 2 * BOARD_WIDTH + 2 * MARGIN + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
-    # Panel Stats
-    y_offset = panel_height + 10
-    title = CONSOLE_FONT.render("Panel Stats", True, TITLE_COLOR)
-    title_rect = title.get_rect(center=(BOARD_WIDTH + CONSOLE_WIDTH // 2, y_offset + title.get_height() // 2))
-    screen.blit(title, title_rect)
+        y_offset += 20
+        bot_label = CONSOLE_FONT.render(f"Bot ({'White' if bot_colors[i] == chess.WHITE else 'Black'})", True, WHITE)
+        screen.blit(bot_label, (2 * BOARD_WIDTH + 2 * MARGIN + 10, y_offset))
 
-    y_offset += 25
-    draw_text(f"Bot ({'White' if bot_color == chess.WHITE else 'Black'})", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-    y_offset += 20
-    bot_depth = bot_stats.get("depth", "-") if bot_stats else "-"
-    draw_text(f"DEPTH: {bot_depth}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-    y_offset += 20
-    bot_score = bot_stats.get("score", "-") if bot_stats else "-"
-    draw_text(f"SCORE: {bot_score}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-    y_offset += 20
-    if bot_stats and "nodes" in bot_stats:
-        nodes = str(bot_stats.get("nodes", 0)).ljust(10)
-        time_taken = f"{bot_stats.get('time', 0.0):.4f}".ljust(8)
-        draw_text(f"NODES: {nodes} TIME: {time_taken}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+        y_offset += 20
+        bot_stats = bot_stats_list[i]
+        bot_depth = bot_stats.get("depth", "-")
+        draw_text(f"Depth: {bot_depth}", 2 * BOARD_WIDTH + 2 * MARGIN + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
-    y_offset += 30
-    draw_text(f"Stockfish ({'Black' if bot_color == chess.WHITE else 'White'})", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-    y_offset += 20
-    stockfish_depth = stockfish_stats.get("depth", "-") if stockfish_stats else "-"
-    draw_text(f"DEPTH:isks {stockfish_depth}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-    y_offset += 20
-    stockfish_score = stockfish_stats.get("score", "-") if stockfish_stats else "-"
-    draw_text(f"SCORE: {stockfish_score}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-    y_offset += 20
-    stockfish_time = stockfish_stats.get("time", "-") if stockfish_stats else "-"
-    if stockfish_time != "-":
-        stockfish_time_str = f"{stockfish_time:.2f}s"
-    else:
-        stockfish_time_str = "-"
-    draw_text(f"TIME: {stockfish_time_str}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+        y_offset += 20
+        bot_score = bot_stats.get("score", "-")
+        draw_text(f"Score: {bot_score}", 2 * BOARD_WIDTH + 2 * MARGIN + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
-    y_offset = HEIGHT - 60
-    btn_back = draw_button("Back", 715, y_offset, 100, 30, (200, 50, 50), (255, 100, 100), mouse_pos)
+        y_offset += 25
+
+    btn_back = draw_button("Back", 2 * BOARD_WIDTH + 2 * MARGIN + 50, HEIGHT - 60, 100, 30, (200, 50, 50), (255, 100, 100), mouse_pos)
     return btn_back
 
 def draw_button(text, x, y, w, h, color, hover_color, mouse_pos, text_color=WHITE):
@@ -220,25 +178,7 @@ def draw_button(text, x, y, w, h, color, hover_color, mouse_pos, text_color=WHIT
     draw_text(text, x + w // 2, y + h // 2, center=True, color=text_color, font=CONSOLE_FONT)
     return rect
 
-def notification(game, message, color=(255, 0, 0), is_victory=False, outline_color=None):
-    while True:
-        screen.blit(menu_background, (0, 0))
-        font_to_use = VICTORY_FONT if is_victory else FONT
-        draw_text(message, WIDTH // 2, HEIGHT // 2, font=font_to_use, color=color, outline_color=outline_color)
-        mouse_pos = pygame.mouse.get_pos()
-        btn_back = draw_button("Back", WIDTH - 110, HEIGHT - 50, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if btn_back.collidepoint(event.pos):
-                    game.board.reset()
-                    game.move_history.clear()
-                    return
-        pygame.display.flip()
-
-def show_results(wins, draws, losses, bot_elo):
+def show_results(wins, draws, losses, bot_elo, pgn_file):
     while True:
         screen.blit(menu_background, (0, 0))
         y_offset = 100
@@ -251,6 +191,8 @@ def show_results(wins, draws, losses, bot_elo):
         draw_text(f"Losses: {losses}", WIDTH // 2, y_offset, font=CONSOLE_FONT, color=WHITE)
         y_offset += 30
         draw_text(f"Bot ELO: {bot_elo:.0f}", WIDTH // 2, y_offset, font=CONSOLE_FONT, color=WHITE)
+        y_offset += 30
+        draw_text(f"PGN: {os.path.basename(pgn_file)}", WIDTH // 2, y_offset, font=CONSOLE_FONT, color=WHITE)
         mouse_pos = pygame.mouse.get_pos()
         btn_back = draw_button("Back", WIDTH - 110, HEIGHT - 50, 100, 40, (200, 50, 50), (255, 100, 100), mouse_pos)
         for event in pygame.event.get():
@@ -264,93 +206,143 @@ def show_results(wins, draws, losses, bot_elo):
 
 def calculate_elo(wins, draws, losses, opponent_elo=3200):
     if losses + 0.5 * draws == 0:
-        return opponent_elo  # Avoid division by zero
+        return opponent_elo
     performance_ratio = (wins + 0.5 * draws) / (losses + 0.5 * draws)
     if performance_ratio == 0:
-        return opponent_elo - 400  # Arbitrary lower bound for no wins/draws
+        return opponent_elo - 400
     elo_diff = 400 * math.log10(performance_ratio)
     return opponent_elo + elo_diff
 
 def handle_move_outcome(game, target_piece=None, bot_color=chess.WHITE):
     if game.board.is_checkmate():
-        checkmate_sound.play()  # Will not play due to volume set to 0
+        checkmate_sound.play()
         winner = "Bot" if game.board.turn != bot_color else "Stockfish"
-        winner_color = WHITE if winner == "Bot" else BLACK
-        outline = WHITE if winner_color == BLACK else None
-        notification(game, f"{winner} Wins!", color=winner_color, is_victory=True, outline_color=outline)
-        return "checkmate", winner
+        return "checkmate", winner, f"{winner} Wins!"
     elif game.board.is_stalemate():
-        notification(game, "Stalemate!")
-        return "stalemate", None
+        return "stalemate", None, "Stalemate!"
     elif game.board.is_insufficient_material():
-        notification(game, "Draw: Insufficient material!")
-        return "draw", None
+        return "draw", None, "Draw: Insufficient material!"
     if target_piece:
-        capture_sound.play()  # Will not play due to volume set to 0
+        capture_sound.play()
     else:
-        move_sound.play()  # Will not play due to volume set to 0
+        move_sound.play()
     if game.board.is_check():
-        check_sound.play()  # Will not play due to volume set to 0
-    return None, None
+        check_sound.play()
+    return None, None, ""
+
+def export_pgn(games, bot_colors):
+    pgn_file = os.path.join(bundle_dir, "game_records.pgn")
+    with open(pgn_file, "w", encoding="utf-8") as f:
+        for i, game in enumerate(games):
+            pgn_game = chess.pgn.Game()
+            pgn_game.headers["Event"] = "Bot vs Stockfish"
+            pgn_game.headers["Site"] = "Local"
+            pgn_game.headers["Date"] = time.strftime("%Y.%m.%d")
+            pgn_game.headers["Round"] = str(i + 1)
+            pgn_game.headers["White"] = "Bot" if bot_colors[i] == chess.WHITE else "Stockfish"
+            pgn_game.headers["Black"] = "Stockfish" if bot_colors[i] == chess.WHITE else "Bot"
+            node = pgn_game
+            for move in game.move_history:
+                node = node.add_variation(move)
+            pgn_game.headers["Result"] = (
+                "1-0" if game.board.is_checkmate() and game.board.turn == chess.BLACK else
+                "0-1" if game.board.is_checkmate() and game.board.turn == chess.WHITE else
+                "1/2-1/2" if game.board.is_game_over() else "*"
+            )
+            print(pgn_game, file=f, end="\n\n")
+    return pgn_file
 
 def bot_vs_stockfish():
     wins, draws, losses = 0, 0, 0
     stockfish_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Engine", "stockfish", "stockfish.exe")
     if not os.path.isfile(stockfish_path):
-        raise FileNotFoundError(f"Không tìm thấy file stockfish.exe tại {stockfish_path}.")
-    stockfish = Stockfish(path=stockfish_path, depth=15)
-    stockfish.set_elo_rating(3200)
+        draw_text("Stockfish not found!", WIDTH // 2, HEIGHT // 2, font=FONT, color=(255, 0, 0))
+        pygame.display.flip()
+        pygame.time.wait(2000)
+        return
 
-    for game_num in range(4):
-        bot_color = chess.WHITE if game_num % 2 == 0 else chess.BLACK
-        game = ChessGame()
-        bot = Engine()
-        bot_stats = {}
-        stockfish_stats = {}
-        running = True
+    games = [ChessGame() for _ in range(4)]
+    bots = [Engine() for _ in range(4)]
+    stockfishes = [Stockfish(path=stockfish_path, depth=1) for _ in range(4)]
+    bot_colors = [chess.WHITE if i % 2 == 0 else chess.BLACK for i in range(4)]
+    bot_stats_list = [{} for _ in range(4)]
+    stockfish_stats_list = [{} for _ in range(4)]
+    game_active = [True for _ in range(4)]
+    game_messages = [""] * 4
 
-        def get_bot_move():
+    def get_bot_move(game, bot, stats):
+        start_time = time.time()
+        bot.set_position(game.board.fen())
+        result = bot.get_best_move_with_stats()
+        end_time = time.time()
+        move = result.get("move")
+        stats.update({
+            "depth": result.get("depth", "-"),
+            "score": "-",
+            "nodes": result.get("nodes", 0),
+            "time": end_time - start_time
+        })
+        return move
+
+    def get_stockfish_move(game, stockfish, stats):
+        try:
+            stockfish.set_fen_position(game.board.fen())
             start_time = time.time()
-            bot.set_position(game.board.fen())
-            result = bot.get_best_move_with_stats(max_time=7000)
+            best_move = stockfish.get_best_move_time(1000)
             end_time = time.time()
-            move = result.get("move")
-            bot_stats.update({
-                "depth": result.get("depth", "-"),
-                "score": "-",
-                "nodes": result.get("nodes", 0),
+            evaluation = stockfish.get_evaluation()
+            score = "-"
+            if evaluation["type"] == "cp":
+                score = str(evaluation["value"])
+            elif evaluation["type"] == "mate":
+                score = f"mate {evaluation['value']}"
+            stats.update({
+                "depth": stockfish.get_parameters().get("depth", "-"),
+                "score": score,
                 "time": end_time - start_time
             })
-            return move
+            return best_move
+        except Exception as e:
+            print(f"Lỗi Stockfish (Game {games.index(game) + 1}): {e}")
+            return None
 
-        def get_stockfish_move():
-            try:
-                stockfish.set_fen_position(game.board.fen())
-                start_time = time.time()
-                best_move = stockfish.get_best_move_time(5000)
-                end_time = time.time()
-                evaluation = stockfish.get_evaluation()
-                score = "-"
-                if isinstance(evaluation, dict):
-                    eval_type = evaluation.get("type", "")
-                    eval_value = evaluation.get("value", "")
-                    if eval_type == "cp":
-                        score = eval_value
-                    elif eval_type == "mate":
-                        score = f"mate {eval_value}"
-                stockfish_stats.update({
-                    "depth": stockfish.get_parameters().get("depth", "-"),
-                    "score": score,
-                    "time": end_time - start_time
-                })
-                return best_move
-            except Exception as e:
-                print(f"Lỗi khi lấy nước đi từ Stockfish: {e}")
-                return None
+    running = True
+    board_positions = [
+        (MARGIN, MARGIN),
+        (BOARD_WIDTH + 2 * MARGIN, MARGIN),
+        (MARGIN, BOARD_WIDTH + 2 * MARGIN),
+        (BOARD_WIDTH + 2 * MARGIN, BOARD_WIDTH + 2 * MARGIN)
+    ]
+    while running and any(game_active):
+        screen.blit(menu_background, (0, 0))
+        for i, (x_offset, y_offset) in enumerate(board_positions):
+            if game_active[i] or game_messages[i]:
+                draw_board(x_offset, y_offset, i, games[i], game_messages[i])
+                draw_pieces(games[i], x_offset, y_offset)
 
-        while running:
-            if game.board.is_game_over():
-                outcome, winner = handle_move_outcome(game, bot_color=bot_color)
+        mouse_pos = pygame.mouse.get_pos()
+        btn_back = draw_console(games, bot_stats_list, stockfish_stats_list, mouse_pos, bot_colors)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                for stockfish in stockfishes:
+                    stockfish.__del__()
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if btn_back.collidepoint(event.pos):
+                    running = False
+
+        if not running:
+            break
+
+        for i in range(4):
+            if not game_active[i]:
+                continue
+
+            if games[i].board.is_game_over():
+                outcome, winner, message = handle_move_outcome(games[i], bot_color=bot_colors[i])
+                game_messages[i] = message
                 if outcome == "checkmate":
                     if winner == "Bot":
                         wins += 1
@@ -358,60 +350,35 @@ def bot_vs_stockfish():
                         losses += 1
                 elif outcome in ["stalemate", "draw"]:
                     draws += 1
-                running = False
-                break
+                game_active[i] = False
+                continue
 
-            screen.fill((0, 0, 0))
-            draw_board()
-            draw_pieces(game)
-            mouse_pos = pygame.mouse.get_pos()
-            btn_back = draw_console(game, bot_stats=bot_stats, stockfish_stats=stockfish_stats, mouse_pos=mouse_pos, bot_color=bot_color)
-
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    stockfish.__del__()
-                    pygame.quit()
-                    sys.exit()
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if btn_back.collidepoint(event.pos):
-                        running = False
-
-            if not running:
-                break
-
-            if game.board.turn == bot_color:
-                uci_move = get_bot_move()
-                if uci_move:
-                    from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
-                    to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
-                    promotion = None
-                    if len(uci_move) == 5:
-                        promotion_piece = uci_move[4].upper()
-                        promotion = {'Q': chess.QUEEN, 'R': chess.ROOK, 'B': chess.BISHOP, 'N': chess.KNIGHT}.get(promotion_piece)
-                    move_result = game.move(from_square, to_square, promotion=promotion)
-                    if move_result["valid"]:
-                        target_piece = game.get_piece(to_square)
-                        handle_move_outcome(game, target_piece, bot_color=bot_color)
+            if games[i].board.turn == bot_colors[i]:
+                uci_move = get_bot_move(games[i], bots[i], bot_stats_list[i])
             else:
-                uci_move = get_stockfish_move()
-                if uci_move:
-                    from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
-                    to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
-                    promotion = None
-                    if len(uci_move) == 5:
-                        promotion_piece = uci_move[4].upper()
-                        promotion = {'Q': chess.QUEEN, 'R': chess.ROOK, 'B': chess.BISHOP, 'N': chess.KNIGHT}.get(promotion_piece)
-                    move_result = game.move(from_square, to_square, promotion=promotion)
-                    if move_result["valid"]:
-                        target_piece = game.get_piece(to_square)
-                        handle_move_outcome(game, target_piece, bot_color=bot_color)
+                uci_move = get_stockfish_move(games[i], stockfishes[i], stockfish_stats_list[i])
 
-            pygame.display.flip()
-            pygame.time.wait(500)
+            if uci_move:
+                from_square = chess.square(ord(uci_move[0]) - ord('a'), int(uci_move[1]) - 1)
+                to_square = chess.square(ord(uci_move[2]) - ord('a'), int(uci_move[3]) - 1)
+                promotion = None
+                if len(uci_move) == 5:
+                    promotion_piece = uci_move[4].upper()
+                    promotion = {'Q': chess.QUEEN, 'R': chess.ROOK, 'B': chess.BISHOP, 'N': chess.KNIGHT}.get(promotion_piece)
+                move_result = games[i].move(from_square, to_square, promotion=promotion)
+                if move_result["valid"]:
+                    target_piece = games[i].get_piece(to_square)
+                    outcome, winner, message = handle_move_outcome(games[i], target_piece, bot_color=bot_colors[i])
+                    game_messages[i] = message
 
-    stockfish.__del__()
+        pygame.display.flip()
+        pygame.time.wait(100)
+
+    pgn_file = export_pgn(games, bot_colors)
+    for stockfish in stockfishes:
+        stockfish.__del__()
     bot_elo = calculate_elo(wins, draws, losses)
-    show_results(wins, draws, losses, bot_elo)
+    show_results(wins, draws, losses, bot_elo, pgn_file)
 
 def main_menu():
     running = True

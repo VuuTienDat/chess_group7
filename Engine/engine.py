@@ -25,13 +25,13 @@ class Engine:
         try:
             # Khởi tạo UCI engine
             self.engine = chess.engine.SimpleEngine.popen_uci(self.exe_path)
-            # Cấu hình Hash (MORA hỗ trợ)
+            # Cấu hình Hash (hỗ trợ)
             self.engine.configure({"Hash": 128})
             # Lưu trạng thái bàn cờ
             self.board = chess.Board()
-            logging.info("MORA engine khởi tạo thành công")
+            logging.info("engine khởi tạo thành công")
         except chess.engine.EngineError as e:
-            logging.error(f"Lỗi khi khởi tạo MORA engine: {e}")
+            logging.error(f"Lỗi khi khởi tạo engine: {e}")
             raise
         except Exception as e:
             logging.error(f"Lỗi không xác định khi khởi tạo engine: {e}")
@@ -45,16 +45,16 @@ class Engine:
             logging.debug(f"Thiết lập FEN: {fen}")
             # Thiết lập vị trí cho engine
             self.engine.position(self.board)
-            logging.info("Vị trí bàn cờ được gửi tới MORA engine")
+            logging.info("Vị trí bàn cờ được gửi tới engine")
         except ValueError as e:
             logging.error(f"Lỗi khi thiết lập FEN: {e}")
         except chess.engine.EngineError as e:
-            logging.error(f"Lỗi khi gửi vị trí tới MORA engine: {e}")
+            logging.error(f"Lỗi khi gửi vị trí tới engine: {e}")
         except Exception as e:
             logging.error(f"Lỗi không xác định khi thiết lập vị trí: {e}")
 
     def get_best_move(self):
-        """Lấy nước đi tốt nhất từ MORA engine ở định dạng UCI với độ sâu 10."""
+        """Lấy nước đi tốt nhất từ engine ở định dạng UCI với độ sâu 10."""
         try:
             # Thiết lập giới hạn độ sâu 10
             limit = chess.engine.Limit(depth=10)
@@ -63,30 +63,30 @@ class Engine:
             result = self.engine.play(self.board, limit)
             move = result.move
             if move is None:
-                logging.warning("MORA engine không trả về nước đi hợp lệ")
+                logging.warning("engine không trả về nước đi hợp lệ")
                 return None
             # Cập nhật board với nước đi
             self.board.push(move)
-            logging.info(f"Nước đi từ MORA: {move.uci()}")
+            logging.info(f"Nước đi từ Engine: {move.uci()}")
             return move.uci()  # Trả về nước đi ở định dạng UCI (e.g., 'e2e4')
         except chess.engine.EngineError as e:
-            logging.error(f"Lỗi khi lấy nước đi từ MORA engine: {e}")
+            logging.error(f"Lỗi khi lấy nước đi từ engine: {e}")
             return None
         except Exception as e:
             logging.error(f"Lỗi không xác định khi lấy nước đi: {e}")
             return None
 
-    def get_best_move_with_stats(self, max_time=7000):
-        """Lấy nước đi tốt nhất từ MORA engine cùng với thống kê."""
+    def get_best_move_with_stats(self):
+        """Lấy nước đi tốt nhất từ engine cùng với thống kê."""
         try:
-            # Sử dụng giới hạn thời gian thay vì depth cố định (chuyển từ mili giây sang giây)
-            limit = chess.engine.Limit(time=max_time/1000.0)
-            logging.debug(f"Tìm nước đi với thời gian tối đa {max_time/1000.0}s, FEN: {self.board.fen()}")
+            # Thiết lập giới hạn độ sâu 8
+            limit = chess.engine.Limit(depth=8)
+            logging.debug(f"Tìm nước đi với độ sâu 8, FEN: {self.board.fen()}")
             # Tìm nước đi tốt nhất với thông tin bổ sung
             result = self.engine.play(self.board, limit, info=chess.engine.Info.ALL)
             move = result.move
             if move is None:
-                logging.warning("MORA engine không trả về nước đi hợp lệ")
+                logging.warning("engine không trả về nước đi hợp lệ")
                 return {"move": None}
 
             # Lấy thông tin thống kê từ engine (nếu có)
@@ -112,10 +112,10 @@ class Engine:
 
             # Cập nhật board với nước đi
             self.board.push(move)
-            logging.info(f"Nước đi từ MORA: {move.uci()} với thống kê: {stats}")
+            logging.info(f"Nước đi từ Engine: {move.uci()} với thống kê: {stats}")
             return stats
         except chess.engine.EngineError as e:
-            logging.error(f"Lỗi khi lấy nước đi từ MORA engine: {e}")
+            logging.error(f"Lỗi khi lấy nước đi từ engine: {e}")
             return {"move": None}
         except Exception as e:
             logging.error(f"Lỗi không xác định khi lấy nước đi: {e}")
@@ -125,6 +125,6 @@ class Engine:
         """Đóng engine khi đối tượng bị hủy."""
         try:
             self.engine.quit()
-            logging.info("MORA engine đã đóng")
+            logging.info("engine đã đóng")
         except AttributeError:
             logging.warning("Không thể đóng engine, có thể đã đóng trước đó")
