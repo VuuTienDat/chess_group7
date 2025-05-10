@@ -76,12 +76,12 @@ class Engine:
             logging.error(f"Lỗi không xác định khi lấy nước đi: {e}")
             return None
 
-    def get_best_move_with_stats(self):
+    def get_best_move_with_stats(self, max_time=7000):
         """Lấy nước đi tốt nhất từ MORA engine cùng với thống kê."""
         try:
-            # Thiết lập giới hạn độ sâu 10
-            limit = chess.engine.Limit(depth=10)
-            logging.debug(f"Tìm nước đi với độ sâu 10, FEN: {self.board.fen()}")
+            # Sử dụng giới hạn thời gian thay vì depth cố định (chuyển từ mili giây sang giây)
+            limit = chess.engine.Limit(time=max_time/1000.0)
+            logging.debug(f"Tìm nước đi với thời gian tối đa {max_time/1000.0}s, FEN: {self.board.fen()}")
             # Tìm nước đi tốt nhất với thông tin bổ sung
             result = self.engine.play(self.board, limit, info=chess.engine.Info.ALL)
             move = result.move

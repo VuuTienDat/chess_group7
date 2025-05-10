@@ -199,6 +199,13 @@ def draw_console(game, bot_stats=None, stockfish_stats=None, mouse_pos=(0, 0), b
     y_offset += 20
     stockfish_score = stockfish_stats.get("score", "-") if stockfish_stats else "-"
     draw_text(f"SCORE: {stockfish_score}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+    y_offset += 20
+    stockfish_time = stockfish_stats.get("time", "-") if stockfish_stats else "-"
+    if stockfish_time != "-":
+        stockfish_time_str = f"{stockfish_time:.2f}s"
+    else:
+        stockfish_time_str = "-"
+    draw_text(f"TIME: {stockfish_time_str}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
     y_offset = HEIGHT - 60
     btn_back = draw_button("Back", 715, y_offset, 100, 30, (200, 50, 50), (255, 100, 100), mouse_pos)
@@ -305,7 +312,7 @@ def bot_vs_stockfish():
         def get_bot_move():
             start_time = time.time()
             bot.set_position(game.board.fen())
-            result = bot.get_best_move_with_stats()
+            result = bot.get_best_move_with_stats(max_time=7000)
             end_time = time.time()
             move = result.get("move")
             bot_stats.update({
@@ -320,7 +327,7 @@ def bot_vs_stockfish():
             try:
                 stockfish.set_fen_position(game.board.fen())
                 start_time = time.time()
-                best_move = stockfish.get_best_move_time(10000)
+                best_move = stockfish.get_best_move_time(5000)
                 end_time = time.time()
                 evaluation = stockfish.get_evaluation()
                 score = "-"
