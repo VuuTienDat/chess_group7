@@ -154,7 +154,18 @@ git stash clear          # Xoá tất cả stash
 - `bot_vs_stockfish.py` - Script để đấu bot với Stockfish.
 - `game.py` - File chính để chạy trò chơi.
 
-  
+## 🖼️ Giao diện tổng quan
+![Screenshot](Image/Screenshot%202025-05-11%20230727.png)
+
+## 🎮 Giao diện chơi 1 vs 1
+![1vs1](Image/1vs1.png)
+
+## 🤖 Giao diện chơi với AI
+![Play vs AI](Image/2.%20play_vs_ai.png)
+
+
+
+
 ## 🌟 Sơ đồ Git Flow (đơn giản hoá)
 
 ```plaintext
