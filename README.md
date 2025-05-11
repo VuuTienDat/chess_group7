@@ -145,6 +145,15 @@ git stash clear          # Xoá tất cả stash
 
 ---
 
+## 📁 Cấu trúc thư mục
+- `Engine/` - Chứa mã xây dựng engine.
+- `game/` - Chứa mã liên quan đến giao diện và logic trò chơi.
+- `music/` - Chứa file âm thanh.
+- `image/` - Chứa hình ảnh của quân cờ và bàn cờ.
+- `bot_vs_stockfish.py` - Script để đấu bot với Stockfish.
+- `game.py` - File chính để chạy trò chơi.
+
+
 ## 🌟 Sơ đồ Git Flow (đơn giản hoá)
 
 ```plaintext
@@ -165,3 +174,14 @@ feature/b            o--o
 - Tránh push lên `main` trực tiếp
 - Review kỹ trước khi release
 
+## Nguồn tham khảo
+Dự án đã tham khảo mã nguồn và ý tưởng từ các dự án cờ vua sau:
+
+- [Halogen](https://github.com/KierenP/Halogen) - Engine cờ vua mã nguồn mở.
+- [Deepov](https://github.com/jhonnold/deepov) - Một engine cờ vua khác.
+- [Duchess](https://github.com/bhlangonijr/duchess) - Engine cờ vua mạnh mẽ.
+- [Kingfish](https://github.com/adityachirlun/kingfish) - Engine cờ vua đơn giản.
+- [PlentyChess](https://github.com/LeelaChessZero/plentychess) - Engine cờ vua hiện đại.
+- [Chess-ENGINE](https://github.com/Chess-ENGINE/Chess-ENGINE) - Dự án phát triển engine cờ vua.
+- [Leela Chess Zero (Lc0)](https://lczero.org/) - Engine cờ vua sử dụng AI và mạng nơ-ron.
+- [Sunfish](https://github.com/thomasahle/sunfish) - Engine cờ vua nhẹ, viết bằng Python.
