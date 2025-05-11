@@ -1,5 +1,7 @@
 # chess_group7
 
+Link Demo dự án : https://www.youtube.com/watch?v=yAXUPCf1pG8
+
 📘 Mô tả dự án:
 Dự án này là một trò chơi cờ vua được phát triển bằng ngôn ngữ Python.
 .....
