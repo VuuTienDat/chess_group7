@@ -210,34 +210,38 @@ def draw_console(game, is_ai_mode=False, ai_stats=None, mouse_pos=(0, 0), ai_thi
     draw_text(f"Total moves: {total_moves}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
 
     # --- Panel AI (only in AI mode) ---
-    y_offset = panel_height + 10
-    title = CONSOLE_FONT.render("Panel AI", True, TITLE_COLOR)
-    title_rect = title.get_rect(center=(BOARD_WIDTH + CONSOLE_WIDTH // 2, y_offset + title.get_height() // 2))
-    screen.blit(title, title_rect)
+    if is_ai_mode:
+        y_offset = panel_height + 10
+        title = CONSOLE_FONT.render("Panel AI", True, TITLE_COLOR)
+        title_rect = title.get_rect(center=(BOARD_WIDTH + CONSOLE_WIDTH // 2, y_offset + title.get_height() // 2))
+        screen.blit(title, title_rect)
 
-    y_offset += 25
-    algorithm = "MORA (Alpha Beta)"
-    draw_text(f"Algorithm: {algorithm}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+        y_offset += 25
+        algorithm = "MORA (Alpha Beta)"
+        draw_text(f"Algorithm: {algorithm}", BOARD_WIDTH + 10, y_offset, 
+                  font=CONSOLE_FONT, center=False, color=WHITE)
 
-    y_offset += 25
-    # Only show DEPTH if ai_stats has data
-    depth = ai_stats.get("depth", "-") if ai_stats else "-"
-    draw_text(f"DEPTH: {depth}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+        y_offset += 25
+        depth = ai_stats.get("depth", "-") if ai_stats else "-"
+        draw_text(f"DEPTH: {depth}", BOARD_WIDTH + 10, y_offset, 
+                  font=CONSOLE_FONT, center=False, color=WHITE)
 
-    y_offset += 25
-    max_score = ai_stats.get("score", "-") if ai_stats else "-"
-    draw_text(f"MAX SCORE: {max_score}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+        y_offset += 25
+        max_score = ai_stats.get("score", "-") if ai_stats else "-"
+        draw_text(f"MAX SCORE: {max_score}", BOARD_WIDTH + 10, y_offset, 
+                  font=CONSOLE_FONT, center=False, color=WHITE)
 
-    y_offset += 25
-    # Only display the table if ai_stats has actual data, and only show NODES and TIME
-    if ai_stats and "nodes" in ai_stats:
-        nodes_header = "NODES".ljust(10)
-        time_header = "TIME".ljust(8)
-        draw_text(f"{nodes_header}{time_header}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
-        y_offset += 20
-        nodes = str(ai_stats.get("nodes", 0)).ljust(10)
-        time_taken = f"{ai_stats.get('time', 0.0):.4f}".ljust(8)
-        draw_text(f"{nodes}{time_taken}", BOARD_WIDTH + 10, y_offset, font=CONSOLE_FONT, center=False, color=WHITE)
+        y_offset += 25
+        if ai_stats and "nodes" in ai_stats:
+            nodes_header = "NODES".ljust(10)
+            time_header = "TIME".ljust(8)
+            draw_text(f"{nodes_header}{time_header}", BOARD_WIDTH + 10, y_offset, 
+                      font=CONSOLE_FONT, center=False, color=WHITE)
+            y_offset += 20
+            nodes = str(ai_stats.get("nodes", 0)).ljust(10)
+            time_taken = f"{ai_stats.get('time', 0.0):.4f}".ljust(8)
+            draw_text(f"{nodes}{time_taken}", BOARD_WIDTH + 10, y_offset, 
+                      font=CONSOLE_FONT, center=False, color=WHITE)
 
     # Draw "AI is thinking" above the buttons if AI is thinking, centered and with more space
     if ai_thinking:
