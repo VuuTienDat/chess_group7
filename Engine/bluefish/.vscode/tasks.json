@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: g++.exe build all files",
+            "command": "C:\\msys64\\ucrt64\\bin\\g++.exe",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-g",
+                "C:\\engine\\attacks.cpp",
+                "C:\\engine\\bitboards.cpp",
+                "C:\\engine\\evaluation.cpp",
+                "C:\\engine\\main.cpp",
+                "C:\\engine\\move.cpp",
+                "C:\\engine\\movegenerator.cpp",
+                "C:\\engine\\pawnhashtable.cpp",
+                "C:\\engine\\position.cpp",
+                "C:\\engine\\search.cpp",
+                "C:\\engine\\timemanagement.cpp",
+                "C:\\engine\\transpositiontable.cpp",
+                "C:\\engine\\uci.cpp",
+                "-o",
+                "C:\\engine\\\\engine.exe"
+            ],
+            "options": {
+                "cwd": "C:\\engine"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Task to build all C++ files into engine.exe."
+        }
+    ]
+}

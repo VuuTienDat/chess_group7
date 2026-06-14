@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: g++.exe build all files",
+            "command": "C:\\msys64\\ucrt64\\bin\\g++.exe",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-g",
+                "C:\\chess_group7\\Engine\\bluefish\\attacks.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\bitboards.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\evaluation.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\main.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\move.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\movegenerator.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\pawnhashtable.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\position.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\search.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\timemanagement.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\transpositiontable.cpp",
+                "C:\\chess_group7\\Engine\\bluefish\\uci.cpp",
+                "-o",
+                "C:\\chess_group7\\Engine\\bluefish\\engine.exe"
+            ],
+            "options": {
+                "cwd": "C:\\chess_group7\\Engine\\bluefish"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Task to build all C++ files into engine.exe."
+        }
+    ]
+}
