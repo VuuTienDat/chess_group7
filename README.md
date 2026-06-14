@@ -1,5 +1,7 @@
 # chess_group7
 
+Link Demo dự án : https://www.youtube.com/watch?v=yAXUPCf1pG8
+
 📘 Mô tả dự án:
 Dự án này là một trò chơi cờ vua được phát triển bằng ngôn ngữ Python.
 .....
@@ -154,6 +156,7 @@ git stash clear          # Xoá tất cả stash
 - `bot_vs_stockfish.py` - Script để đấu bot với Stockfish.
 - `game.py` - File chính để chạy trò chơi.
 
+ 
 ## 🖼️ Giao diện tổng quan
 ![Screenshot](Image/Screenshot%202025-05-11%20230727.png)
 
@@ -162,6 +165,7 @@ git stash clear          # Xoá tất cả stash
 
 ## 🤖 Giao diện chơi với AI
 ![Play vs AI](Image/2.%20play_vs_ai.png)
+
 
 
 
@@ -177,7 +181,6 @@ feature/a         o--o     \
 feature/b            o--o
 ```
 
----
 
 ## 📬 Tips cho teamwork
 
@@ -185,6 +188,9 @@ feature/b            o--o
 - Tạo Pull Request khi merge
 - Tránh push lên `main` trực tiếp
 - Review kỹ trước khi release
+
+
+
 
 
 ## Nguồn tham khảo
